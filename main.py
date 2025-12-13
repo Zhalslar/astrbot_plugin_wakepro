@@ -66,6 +66,7 @@ class GroupState(BaseModel):
     bot_msgs: deque = Field(
         default_factory=lambda: deque(maxlen=5)
     )  # Bot消息缓存，共5条
+    last_cleanup: float = 0.0  # 最后一次清理时间
 
 
 class StateManager:
@@ -221,16 +222,21 @@ class WakeProPlugin(Star):
         # 更新最后活动时间
         member.last_activity = now
         
-        # 定期清理不活跃成员
-        inactive_days = self.conf.get("member_inactive_days", 3.0)
-        if inactive_days > 0:
-            inactive_seconds = inactive_days * 86400  # 转换为秒
-            StateManager.cleanup_inactive_members(gid, inactive_seconds, now)
-        
-        # 强制执行成员数量限制
-        max_members = self.conf.get("max_members_per_group", 2000)
-        if max_members > 0:
-            StateManager.enforce_member_limit(gid, max_members)
+        # 定期清理不活跃成员（每10分钟最多清理一次）
+        cleanup_interval = 600  # 10分钟
+        if now - g.last_cleanup >= cleanup_interval:
+            inactive_days = self.conf.get("member_inactive_days", 3.0)
+            if inactive_days > 0:
+                inactive_seconds = inactive_days * 86400  # 转换为秒
+                StateManager.cleanup_inactive_members(gid, inactive_seconds, now)
+            
+            # 强制执行成员数量限制
+            max_members = self.conf.get("max_members_per_group", 2000)
+            if max_members > 0:
+                StateManager.enforce_member_limit(gid, max_members)
+            
+            # 更新最后清理时间
+            g.last_cleanup = now
 
         # 记录阻止原因，只有在会触发唤醒时才真正阻止事件传播
         # Record blocking reason, only actually block event propagation if wake would be triggered
