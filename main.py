@@ -144,7 +144,8 @@ class WakeProPlugin(Star):
         member = g.members[uid]
         now = time.time()
 
-        # 记录阻止原因，只有在会触发唤醒时才真正阻止
+        # 记录阻止原因，只有在会触发唤醒时才真正阻止事件传播
+        # Record blocking reason, only actually block event propagation if wake would be triggered
         block_reason = None
 
         # 唤醒CD检查
@@ -331,7 +332,8 @@ class WakeProPlugin(Star):
             reason = "prob"
             logger.debug(f"{uid} 触发概率唤醒")
 
-        # 应用阻止规则（只有在会触发唤醒时才真正阻止）
+        # 应用阻止规则（只有在会触发唤醒时才真正阻止事件传播到其他插件）
+        # Apply blocking rules (only stop event if it would trigger wake)
         if wake and block_reason:
             logger.debug(f"{uid} 触发了唤醒但因 {block_reason} 被阻止")
             event.stop_event()
