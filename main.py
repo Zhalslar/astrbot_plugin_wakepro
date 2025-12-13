@@ -143,7 +143,9 @@ class StateManager:
         )
         
         # 删除最不活跃的一批成员
-        remove_count = min(batch_size, current_count - max_members + batch_size)
+        # 至少删除超出的数量，但为了避免频繁清理，额外删除一些作为缓冲
+        excess = current_count - max_members
+        remove_count = min(excess + batch_size, batch_size * 2, current_count)
         removed = 0
         
         for uid, _ in sorted_members[:remove_count]:
