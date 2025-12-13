@@ -137,5 +137,17 @@
         "hint": "触发bot沉默时的阈值（0~1） * 沉默时间倍数 = 沉默时间",
         "type": "float",
         "default": 500
+    },
+    "max_members_per_group": {
+        "description": "每个群最大成员数",
+        "hint": "每个群聊最多记录多少个成员的状态，超过此数量时会自动清理不活跃的成员，防止内存溢出。建议设置为2000",
+        "type": "int",
+        "default": 2000
+    },
+    "member_inactive_days": {
+        "description": "成员不活跃天数",
+        "hint": "成员超过多少天未发言后会被清理，设置为0时关闭基于时间的清理。建议设置为3天",
+        "type": "float",
+        "default": 3.0
     }
 }

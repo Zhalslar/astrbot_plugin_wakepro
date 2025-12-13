@@ -53,6 +53,7 @@ class MemberState(BaseModel):
     last_wake: float = 0.0  # 最后唤醒bot的时间
     last_wake_reason: str = "" # 最后唤醒bot的原因
     last_reply: float = 0.0 # 最后回复的时间
+    last_activity: float = 0.0  # 最后活动时间（用于清理不活跃成员）
     pend: deque = Field(default_factory=lambda: deque(maxlen=4))  # 事件缓存
     lock: asyncio.Lock = Field(default_factory=asyncio.Lock)
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -77,6 +78,80 @@ class StateManager:
         if gid not in cls._groups:
             cls._groups[gid] = GroupState(gid=gid)
         return cls._groups[gid]
+
+    @classmethod
+    def cleanup_inactive_members(cls, gid: str, inactive_seconds: float, now: float) -> int:
+        """清理不活跃的成员
+        
+        Args:
+            gid: 群组ID
+            inactive_seconds: 不活跃时间阈值（秒）
+            now: 当前时间戳
+            
+        Returns:
+            清理的成员数量
+        """
+        if gid not in cls._groups or inactive_seconds <= 0:
+            return 0
+        
+        group = cls._groups[gid]
+        inactive_threshold = now - inactive_seconds
+        
+        # 找出不活跃的成员
+        inactive_members = [
+            uid for uid, member in group.members.items()
+            if member.last_activity < inactive_threshold
+        ]
+        
+        # 删除不活跃成员
+        for uid in inactive_members:
+            del group.members[uid]
+        
+        if inactive_members:
+            logger.info(f"群({gid})清理了{len(inactive_members)}个不活跃成员")
+        
+        return len(inactive_members)
+
+    @classmethod
+    def enforce_member_limit(cls, gid: str, max_members: int, batch_size: int = 200) -> int:
+        """强制执行成员数量限制
+        
+        当成员数超过限制时，删除最不活跃的一批成员
+        
+        Args:
+            gid: 群组ID
+            max_members: 最大成员数
+            batch_size: 每次清理的批次大小
+            
+        Returns:
+            清理的成员数量
+        """
+        if gid not in cls._groups or max_members <= 0:
+            return 0
+        
+        group = cls._groups[gid]
+        current_count = len(group.members)
+        
+        if current_count <= max_members:
+            return 0
+        
+        # 按最后活动时间排序，找出最不活跃的成员
+        sorted_members = sorted(
+            group.members.items(),
+            key=lambda x: x[1].last_activity
+        )
+        
+        # 删除最不活跃的一批成员
+        remove_count = min(batch_size, current_count - max_members + batch_size)
+        removed = 0
+        
+        for uid, _ in sorted_members[:remove_count]:
+            del group.members[uid]
+            removed += 1
+        
+        logger.info(f"群({gid})超过最大成员数限制({max_members})，清理了{removed}个最不活跃的成员")
+        
+        return removed
 
 
 @register("astrbot_plugin_wakepro", "Zhalslar", "...", "...")
@@ -138,11 +213,24 @@ class WakeProPlugin(Star):
             return
 
         # 更新成员状态
-        if uid not in g.members:
-            g.members[uid] = MemberState(uid=uid)
-
-        member = g.members[uid]
         now = time.time()
+        if uid not in g.members:
+            g.members[uid] = MemberState(uid=uid, last_activity=now)
+        
+        member = g.members[uid]
+        # 更新最后活动时间
+        member.last_activity = now
+        
+        # 定期清理不活跃成员
+        inactive_days = self.conf.get("member_inactive_days", 3.0)
+        if inactive_days > 0:
+            inactive_seconds = inactive_days * 86400  # 转换为秒
+            StateManager.cleanup_inactive_members(gid, inactive_seconds, now)
+        
+        # 强制执行成员数量限制
+        max_members = self.conf.get("max_members_per_group", 2000)
+        if max_members > 0:
+            StateManager.enforce_member_limit(gid, max_members)
 
         # 记录阻止原因，只有在会触发唤醒时才真正阻止事件传播
         # Record blocking reason, only actually block event propagation if wake would be triggered
