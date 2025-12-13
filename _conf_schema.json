@@ -149,5 +149,11 @@
         "hint": "成员超过多少天未发言后会被清理，设置为0时关闭基于时间的清理。建议设置为3天",
         "type": "float",
         "default": 3.0
+    },
+    "cleanup_interval_minutes": {
+        "description": "清理间隔（分钟）",
+        "hint": "每个群多久执行一次成员清理检查，设置较大的值可以减少性能开销。建议设置为10分钟",
+        "type": "float",
+        "default": 10.0
     }
 }

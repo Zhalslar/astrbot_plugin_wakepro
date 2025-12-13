@@ -99,9 +99,10 @@ class StateManager:
         inactive_threshold = now - inactive_seconds
         
         # 找出不活跃的成员
+        # 注意：last_activity为0.0的成员被视为刚创建，不会被清理
         inactive_members = [
             uid for uid, member in group.members.items()
-            if member.last_activity < inactive_threshold
+            if member.last_activity > 0 and member.last_activity < inactive_threshold
         ]
         
         # 删除不活跃成员
@@ -143,7 +144,8 @@ class StateManager:
         )
         
         # 删除最不活跃的一批成员
-        # 至少删除超出的数量，但为了避免频繁清理，额外删除一些作为缓冲
+        # 策略：删除超出数量(excess) + 额外缓冲(batch_size)，避免频繁触发清理
+        # 但限制单次最多删除 batch_size * 2，避免一次性删除过多
         excess = current_count - max_members
         remove_count = min(excess + batch_size, batch_size * 2, current_count)
         removed = 0
@@ -224,8 +226,9 @@ class WakeProPlugin(Star):
         # 更新最后活动时间
         member.last_activity = now
         
-        # 定期清理不活跃成员（每10分钟最多清理一次）
-        cleanup_interval = 600  # 10分钟
+        # 定期清理不活跃成员（根据配置的清理间隔）
+        cleanup_interval_minutes = self.conf.get("cleanup_interval_minutes", 10.0)
+        cleanup_interval = cleanup_interval_minutes * 60  # 转换为秒
         if now - g.last_cleanup >= cleanup_interval:
             inactive_days = self.conf.get("member_inactive_days", 3.0)
             if inactive_days > 0:
