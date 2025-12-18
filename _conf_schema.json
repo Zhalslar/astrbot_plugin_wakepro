@@ -53,20 +53,35 @@
     },
     "wake_cd": {
         "description": "唤醒CD(秒)",
-        "hint": "唤醒bot的CD(冷却时间)，每个成员单独计CD，bot处于唤醒CD时拒收该成员的一切消息，此CD优先级比其他CD高，建议别设太大，会影响挂起和唤醒延长的效果。另外如果你开有多个bot，建议CD宁可设得很小也不要设为0，这样能防止同一个群两个bot一起回复",
+        "hint": "唤醒bot的CD(冷却时间)，每个成员单独计CD，bot处于唤醒CD时拒收该成员的一切消息，此CD优先级比其他CD高，建议别设太大，会影响挂起和唤醒延长的效果",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 10,
+            "step": 0.1
+        },
         "default": 0.5
     },
     "pend_cd": {
         "description": "挂起CD(秒)",
         "hint": "唤醒bot后, bot将挂起一段时间, 这段时间内如果还没等bot回复, 用户又向bot发起对话，则合并前后两次消息再请求LLM, 每个成员单独计CD, 单位秒，如果发现与其他插件产生冲突，可以尝试将挂起CD改为0关闭挂起",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 60,
+            "step": 1
+        },
         "default": 15.0
     },
     "wake_extend": {
         "description": "唤醒延长（秒）",
         "hint": "bot被唤醒后的多长时间内，持续保持唤醒状态(每个用户单独计时)。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 10,
+            "step": 1
+        },
         "default": 5.0
     },
     "mention_wake": {
@@ -79,18 +94,33 @@
         "description": "相关性唤醒阈值",
         "hint": "当前消息与上文bot的消息相关性大时，唤醒bot。 降低阈值可更容易唤醒，保持对话连续性。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.8
     },
     "ask_wake": {
         "description": "答疑唤醒阈值",
         "hint": "当群里有人问专业性问题时，唤醒bot。建议阈值高一点，日常聊天疑问句出现的频率非常高。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.88
     },
     "bored_wake": {
         "description": "无聊唤醒阈值",
         "hint": "当群里有人感到无聊或长时间无人发言时，唤醒bot。无聊检测设小点可更敏感，活跃群聊氛围。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.6
     },
     "interest_words_str": {
@@ -106,36 +136,66 @@
         "description": "兴趣唤醒阈值",
         "hint": "根据自定义的兴趣词来决定是否唤醒，设得越大越难唤醒。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.53
     },
     "prob_wake": {
         "description": "兜底唤醒概率",
         "hint": "上述所有唤醒机制都没能唤醒bot时，最后会按照此概率尝试唤醒bot(相当于Astrbot框架中的主动唤醒概率)，概率越大越容易唤醒，建议设置得非常小",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.0001
+        },
         "default": 0.0005
     },
     "shutup": {
         "description": "闭嘴检测阈值",
         "hint": "有人感觉bot太多话时，bot自动闭嘴一段时间。 低阈值更容易让bot闭嘴。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.69
     },
     "insult": {
         "description": "辱骂检测阈值",
         "hint": "有人辱骂bot时，bot自动沉默一段时间。 低阈值更容易让bot沉默，玻璃心更重。 设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.69
     },
     "ai": {
         "description": "人机检测阈值",
         "hint": "检测是否是人机的发言， 如果是则bot对该人机沉默一段时间。 阈值设小点会更容易判定为人机，设为0时关闭检测",
         "type": "float",
+        "slider": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+        },
         "default": 0.69
     },
     "silence_multiple": {
         "description": "沉默时间倍数",
         "hint": "触发bot沉默时的阈值（0~1） * 沉默时间倍数 = 沉默时间",
         "type": "float",
+        "slider": {
+            "min": 100,
+            "max": 1000,
+            "step": 10
+        },
         "default": 500
     }
 }
