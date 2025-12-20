@@ -119,7 +119,9 @@ class WakeProPlugin(Star):
         g: GroupState = StateManager.get_group(gid)
 
         # 只处理文本
-        if not msg:
+        plains = [seg.text for seg in chain if isinstance(seg, Plain)]
+        plain = " ".join(plains)
+        if not plain:
             return
 
         # 群聊黑白名单 / 用户黑名单
@@ -145,7 +147,6 @@ class WakeProPlugin(Star):
         now = time.time()
 
         # 记录阻止原因，只有在会触发唤醒时才真正阻止事件传播
-        # Record blocking reason, only actually block event propagation if wake would be triggered
         block_reason = None
 
         # 唤醒CD检查
@@ -179,7 +180,7 @@ class WakeProPlugin(Star):
 
         # 复读屏蔽
         if not block_reason and self.conf["block_reread"]:
-            cleaned_msg = re.sub(r"[^\w\u4e00-\u9fff]", "", msg).lower()
+            cleaned_msg = re.sub(r"[^\w\u4e00-\u9fff]", "", plain).lower()
             cleaned_bot_msgs = [
                 re.sub(r"[^\w\u4e00-\u9fff]", "", bmsg).lower() for bmsg in g.bot_msgs
             ]
@@ -215,7 +216,7 @@ class WakeProPlugin(Star):
 
         # 各类唤醒条件
         wake = event.is_at_or_wake_command
-        reason = ""
+        wake_reason = ""
 
         # 前缀唤醒
         if isinstance(self.wake_prefix, list) and self.wake_prefix:
@@ -238,7 +239,7 @@ class WakeProPlugin(Star):
 
                 # 通过所有过滤，执行唤醒
                 wake = True
-                reason = "prefix"
+                wake_reason = "prefix"
                 logger.debug(f"{uid} 触发前缀唤醒：{prefix}")
                 break
 
@@ -246,12 +247,12 @@ class WakeProPlugin(Star):
         for seg in chain:
             if isinstance(seg, At) and str(seg.qq) == bid:
                 wake = True
-                reason = "at"
+                wake_reason = "at"
                 logger.debug(f"{uid} 触发At唤醒")
                 break
             elif isinstance(seg, Reply) and str(seg.sender_id) == bid:
                 wake = True
-                reason = "reply"
+                wake_reason = "reply"
                 logger.debug(f"{uid} 触发引用回复唤醒")
                 break
 
@@ -259,9 +260,9 @@ class WakeProPlugin(Star):
         if not wake and self.conf["mention_wake"]:
             names = [n for n in self.conf["mention_wake"] if n]
             for n in names:
-                if n and n in msg:
+                if n and n in plain:
                     wake = True
-                    reason = "mention"
+                    wake_reason = "mention"
                     logger.debug(f"{uid} 触发提及唤醒：{n}")
                     break
 
@@ -273,7 +274,7 @@ class WakeProPlugin(Star):
             and (now - member.last_reply) <= int(self.conf["wake_extend"] or 0)
         ):
             wake = True
-            reason = "prolong"
+            wake_reason = "prolong"
             logger.debug(
                 f"{uid} 唤醒延长, 时间为上次llm回复后的第{now - member.last_reply}秒"
             )
@@ -281,32 +282,32 @@ class WakeProPlugin(Star):
         # 话题相关性唤醒
         if not wake and self.conf["relevant_wake"] and g.bot_msgs:
             simi = self.sim.similarity(
-                group_id=gid, user_msg=msg, bot_msgs=list(g.bot_msgs)
+                group_id=gid, user_msg=plain, bot_msgs=list(g.bot_msgs)
             )
             logger.debug(f"话题相关度:{simi}")
             if simi > self.conf["relevant_wake"]:
                 wake = True
-                reason = "similar"
+                wake_reason = "similar"
                 logger.debug(f"{uid} 触发话题相关性唤醒, 相关度：{simi}")
 
         # 答疑唤醒
         if (
             not wake
             and self.conf["ask_wake"]
-            and (ask_th := self.sent.ask(msg)) > self.conf["ask_wake"]
+            and (ask_th := self.sent.ask(plain)) > self.conf["ask_wake"]
         ):
             wake = True
-            reason = "ask"
+            wake_reason = "ask"
             logger.debug(f"{uid} 触发答疑唤醒, 疑问值：{ask_th}")
 
         # 无聊唤醒
         if (
             not wake
             and self.conf["bored_wake"]
-            and (bored_th := self.sent.bored(msg)) > self.conf["bored_wake"]
+            and (bored_th := self.sent.bored(plain)) > self.conf["bored_wake"]
         ):
             wake = True
-            reason = "bored"
+            wake_reason = "bored"
             logger.debug(f"{uid} 触发无聊唤醒, 无聊值：{bored_th}")
 
         # 兴趣唤醒
@@ -315,11 +316,11 @@ class WakeProPlugin(Star):
             and self.conf["interest_wake"]
 
         ):
-            interest_th = self.interest.calc_interest(msg)
+            interest_th = self.interest.calc_interest(plain)
             logger.debug(f"兴趣值：{interest_th}")
             if interest_th > self.conf["interest_wake"]:
                 wake = True
-                reason = "interest"
+                wake_reason = "interest"
                 logger.debug(f"{uid} 触发兴趣唤醒, 兴趣值：{interest_th}")
 
         # 概率唤醒
@@ -329,11 +330,10 @@ class WakeProPlugin(Star):
             and random.random() < self.conf["prob_wake"]
         ):
             wake = True
-            reason = "prob"
+            wake_reason = "prob"
             logger.debug(f"{uid} 触发概率唤醒")
 
         # 应用阻止规则（只有在会触发唤醒时才真正阻止事件传播到其他插件）
-        # Apply blocking rules (only stop event if it would trigger wake)
         if wake and block_reason:
             logger.debug(f"{uid} 触发了唤醒但因 {block_reason} 被阻止")
             event.stop_event()
@@ -351,39 +351,39 @@ class WakeProPlugin(Star):
             # 记录唤醒时间
             member.last_wake = now
             # 记录原因
-            member.last_wake_reason = reason
+            member.last_wake_reason = wake_reason
 
 
         # 闭嘴机制(对当前群聊闭嘴)
         if self.conf["shutup"]:
-            shut_th = self.sent.shut(msg)
+            shut_th = self.sent.shut(plain)
             if shut_th > self.conf["shutup"]:
                 silence_sec = shut_th * self.conf["silence_multiple"]
                 g.shutup_until = now + silence_sec
                 reason = f"闭嘴沉默{silence_sec}秒"
-                logger.debug(f"[wakepro] 群({gid}){reason}：{msg}")
+                logger.debug(f"[wakepro] 群({gid}){reason}：{plain}")
                 event.stop_event()
                 return
 
         # 辱骂沉默机制(对单个用户沉默)
         if self.conf["insult"]:
-            insult_th = self.sent.insult(msg)
+            insult_th = self.sent.insult(plain)
             if insult_th > self.conf["insult"]:
                 silence_sec = insult_th * self.conf["silence_multiple"]
                 member.silence_until = now + silence_sec
                 reason = "insult"
-                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{msg}")
+                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{plain}")
                 # event.stop_event() 本轮对话不沉默，方便回怼
                 return
 
         # AI沉默机制(对单个用户沉默)
         if self.conf["ai"]:
-            ai_th = self.sent.is_ai(msg)
+            ai_th = self.sent.is_ai(plain)
             if ai_th > self.conf["ai"]:
                 silence_sec = ai_th * self.conf["silence_multiple"]
                 member.silence_until = now + silence_sec
                 reason = "silence"
-                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{msg}")
+                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{plain}")
                 event.stop_event()
                 return
 
