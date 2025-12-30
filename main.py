@@ -1,420 +1,324 @@
-import asyncio
 import random
 import re
 import time
-from collections import deque
-
-from pydantic import BaseModel, ConfigDict, Field
+from collections.abc import Callable
+from enum import Enum
+from typing import Any, TypeAlias
 
 from astrbot.api import logger
 from astrbot.api.event import filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.components import At, Plain, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.filter.command import CommandFilter
-from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.star_handler import star_handlers_registry
 
-from .interest import Interest
-from .sentiment import Sentiment
-from .similarity import Similarity
+from .core.interest import Interest
+from .core.model import (
+    BlockReason,
+    GroupState,
+    MemberState,
+    StateManager,
+    WakeContext,
+    WakeReason,
+)
+from .core.sentiment import Sentiment
+from .core.similarity import Similarity
+from .core.utils import BUILT_CMDS, get_all_commands
 
-# 内置指令文本
-BUILT_CMDS = [
-    "llm",
-    "t2i",
-    "tts",
-    "sid",
-    "op",
-    "wl",
-    "dashboard_update",
-    "alter_cmd",
-    "provider",
-    "model",
-    "plugin",
-    "plugin ls",
-    "new",
-    "switch",
-    "rename",
-    "del",
-    "reset",
-    "history",
-    "persona",
-    "tool ls",
-    "key",
-    "websearch",
-]
+# ============================================================
+# Pipeline Core
+# ============================================================
 
 
-class MemberState(BaseModel):
-    uid: str
-    silence_until: float = 0.0  # 沉默到何时
-    last_wake: float = 0.0  # 最后唤醒bot的时间
-    last_wake_reason: str = "" # 最后唤醒bot的原因
-    last_reply: float = 0.0 # 最后回复的时间
-    pend: deque = Field(default_factory=lambda: deque(maxlen=4))  # 事件缓存
-    lock: asyncio.Lock = Field(default_factory=asyncio.Lock)
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class PhaseStatus(Enum):
+    PASS = "pass"
+    BLOCK = "block"
+    WAKE = "wake"
+    SILENCE = "silence"
 
 
-class GroupState(BaseModel):
-    gid: str
-    members: dict[str, MemberState] = Field(default_factory=dict)
-    shutup_until: float = 0.0  # 闭嘴到何时
-    bot_msgs: deque = Field(
-        default_factory=lambda: deque(maxlen=5)
-    )  # Bot消息缓存，共5条
+class StepResult:
+    """流水线阶段结果"""
+
+    def __init__(self, status: PhaseStatus, reason: Any = None):
+        self.status = status  # 阶段状态
+        self.reason = reason  # 阻塞/唤醒原因
 
 
-class StateManager:
-    """内存状态管理"""
-
-    _groups: dict[str, GroupState] = {}
-
-    @classmethod
-    def get_group(cls, gid: str) -> GroupState:
-        if gid not in cls._groups:
-            cls._groups[gid] = GroupState(gid=gid)
-        return cls._groups[gid]
+StepHandler: TypeAlias = Callable[[WakeContext], StepResult]
 
 
-@register("astrbot_plugin_wakepro", "Zhalslar", "...", "...")
-class WakeProPlugin(Star):
+class Step:
+    """单个流水线步骤"""
+
+    def __init__(self, name: str, handler: StepHandler):
+        self.name = name
+        self.handler = handler
+
+
+class Pipeline:
+    """顺序执行流水线"""
+
+    def __init__(self, steps: list[Step]):
+        self.steps = steps
+
+    def run(self, ctx: WakeContext):
+        for step in self.steps:
+            ret = step.handler(ctx)
+            if ret.status == PhaseStatus.BLOCK:
+                ctx.event.stop_event()
+                logger.debug(
+                    f"{ctx.uid} 阻塞: {getattr(ret.reason, 'label', ret.reason)}"
+                )
+            elif ret.status == PhaseStatus.WAKE:
+                ctx.member.last_wake = ctx.now
+                ctx.member.last_wake_reason = ret.reason
+                ctx.event.is_at_or_wake_command = True
+                logger.debug(
+                    f"{ctx.uid} 唤醒: {getattr(ret.reason, 'label', ret.reason)}"
+                )
+            elif ret.status == PhaseStatus.SILENCE:
+                logger.debug(
+                    f"{ctx.uid} 沉默: {getattr(ret.reason, 'label', ret.reason)}"
+                )
+
+
+# ============================================================
+# WakePro Plugin (可配置化流水线)
+# ============================================================
+
+
+class WakePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.conf = config
         self.sent = Sentiment()
         self.sim = Similarity()
-        self.commands = self._get_all_commands()
-        self.wake_prefix = self.context.get_config().get("wake_prefix")
-        interest_words_str: list[str] = self.conf["interest_words_str"]
-        interest_words_list: list[list[str]] = [
-            words_str.split() for words_str in interest_words_str
-        ]
-        self.interest = Interest(interest_words_list)
+        self.commands = get_all_commands()
+        self.wake_prefix: list[str] = self.context.get_config().get("wake_prefix", [])
+        interest_words = [w.split() for w in self.conf["wake"]["interest_words_str"]]
+        self.interest = Interest(interest_words)
 
-    def _get_all_commands(self) -> list[str]:
-        """遍历所有注册的处理器获取所有命令"""
-        commands = []
-        for handler in star_handlers_registry:
-            for fl in handler.event_filters:
-                if isinstance(fl, CommandFilter):
-                    commands.append(fl.command_name)
-                    break
-                elif isinstance(fl, CommandGroupFilter):
-                    commands.append(fl.group_name)
-                    break
-        logger.debug(f"插件的指令列表：{commands}")
-        return commands
+        self._enabled_steps: list[str] = [
+            name.split("(", 1)[0].strip() for name in config["pipeline"]["steps"]
+        ]
+        self.pipeline = self._build_pipeline()
+
+    # ============================================================
+    # Pipeline Builder
+    # ============================================================
+    def _register_steps(self) -> dict[str, Step]:
+        return {
+            "list": Step("list", self._check_list),
+            "block": Step("block", self._check_block),
+            "cmd": Step("cmd", self._check_cmd),
+            "wake": Step("wake", self._check_wake),
+            "silence": Step("silence", self._check_silence),
+        }
+
+    def _build_pipeline(self) -> Pipeline:
+        step_map = self._register_steps()
+        steps: list[Step] = []
+
+        if self.conf["pipeline"]["lock_order"]:
+            # 锁定顺序：按注册顺序，但只执行启用的
+            for name, step in step_map.items():
+                if name in self._enabled_steps:
+                    steps.append(step)
+        else:
+            # 自定义顺序
+            for name in self._enabled_steps:
+                step = step_map.get(name)
+                if not step:
+                    raise ValueError(f"Unknown pipeline step: {name}")
+                steps.append(step)
+
+        return Pipeline(steps)
+
+    # ============================================================
+    # Steps
+    # ============================================================
+
+    def _check_list(self, ctx: WakeContext) -> StepResult:
+        """基础过滤"""
+        # 过滤自己
+        if ctx.uid == ctx.bid:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.SELF)
+        # 过滤群聊白名单
+        if ctx.gid not in self.conf.get("white_groups", []):
+            return StepResult(PhaseStatus.BLOCK, BlockReason.WHITE_GROUP)
+        # 过滤群聊黑名单
+        if ctx.gid in self.conf.get("black_groups", []) and not ctx.is_admin:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.BLACK_GROUP)
+        # 过滤用户黑名单
+        if ctx.uid in self.conf.get("user_blacklist", []):
+            return StepResult(PhaseStatus.BLOCK, BlockReason.BLACK_USER)
+        return StepResult(PhaseStatus.PASS)
+
+    def _check_block(self, ctx: WakeContext) -> StepResult:
+        """block 规则判断"""
+        bconf = self.conf["block"]
+        # 违禁词阻塞
+        if bconf["keywords"]:
+            for w in bconf["keywords"]:
+                if w in ctx.plain and not ctx.is_admin:
+                    return StepResult(PhaseStatus.BLOCK, BlockReason.FORBIDDEN)
+        # 复读阻塞
+        if bconf["reread"]:
+            cleaned = re.sub(r"[^\w\u4e00-\u9fff]", "", ctx.plain).lower()
+            for msg in ctx.group.bot_msgs:
+                m = re.sub(r"[^\w\u4e00-\u9fff]", "", msg).lower()
+                if cleaned == m:
+                    return StepResult(PhaseStatus.BLOCK, BlockReason.REREAD)
+        # 唤醒CD阻塞
+        if bconf["wake_cd"] > 0 and ctx.now - ctx.member.last_wake < bconf["wake_cd"]:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.WAKE_CD)
+        # 闭嘴机制阻塞
+        if ctx.group.shutup_until > ctx.now:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.SHUTUP)
+        # 沉默机制阻塞
+        if ctx.member.silence_until > ctx.now:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.SILENCE)
+        return StepResult(PhaseStatus.PASS)
+
+    def _check_cmd(self, ctx: WakeContext) -> StepResult:
+        """检查指令逻辑"""
+        cconf = self.conf["cmd"]
+        # 屏蔽内置指令
+        if cconf["block_builtin"] and ctx.cmd in BUILT_CMDS and not ctx.is_admin:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.BUILTIN)
+
+        seg = ctx.chain[0] if ctx.chain and isinstance(ctx.chain[0], Plain) else None
+        if not seg or not any(seg.text.startswith(p) for p in self.wake_prefix):
+            return StepResult(PhaseStatus.PASS)
+        # 屏蔽前缀触发指令
+        if ctx.cmd and cconf["block_prefix_cmd"] and not ctx.is_admin:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.PREFIX_CMD)
+        # 屏蔽前缀触发LLM
+        if not ctx.cmd and cconf["block_prefix_llm"] and not ctx.is_admin:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.PREFIX_LLM)
+        # 前缀唤醒
+        return StepResult(PhaseStatus.WAKE, WakeReason.PREFIX)
+
+    def _check_wake(self, ctx: WakeContext) -> StepResult:
+        """唤醒规则判断"""
+        wconf = self.conf["wake"]
+        for seg in ctx.chain:
+            # 艾特唤醒
+            if isinstance(seg, At) and str(seg.qq) == ctx.bid:
+                return StepResult(PhaseStatus.WAKE, WakeReason.AT)
+            # 引用唤醒
+            if isinstance(seg, Reply) and str(seg.sender_id) == ctx.bid:
+                return StepResult(PhaseStatus.WAKE, WakeReason.REPLY)
+        # 提及唤醒
+        if len(wconf["names"]) > 0:
+            for name in wconf["names"]:
+                if name in ctx.plain:
+                    return StepResult(PhaseStatus.WAKE, WakeReason.MENTION)
+        # 唤醒延长
+        if (
+            wconf["prolong"] > 0
+            and ctx.member.last_wake_reason
+            in {WakeReason.AT, WakeReason.REPLY, WakeReason.MENTION}
+            and ctx.now - ctx.member.last_reply <= self.conf["prolong"]
+        ):
+            return StepResult(PhaseStatus.WAKE, WakeReason.PROLONG)
+        # 相关性唤醒
+        if wconf["similar"] < 1 and ctx.group.bot_msgs:
+            sim = self.sim.similarity(ctx.gid, ctx.plain, list(ctx.group.bot_msgs))
+            if sim > wconf["similar"]:
+                return StepResult(PhaseStatus.WAKE, WakeReason.SIMILAR)
+        # 答疑唤醒
+        if wconf["ask"] < 1 and self.sent.ask(ctx.plain) > wconf["ask"]:
+            return StepResult(PhaseStatus.WAKE, WakeReason.ASK)
+        # 无聊唤醒
+        if wconf["bored"] < 1 and self.sent.bored(ctx.plain) > wconf["bored"]:
+            return StepResult(PhaseStatus.WAKE, WakeReason.BORED)
+        # 兴趣唤醒
+        if (
+            wconf["interest"] < 1
+            and self.interest.calc_interest(ctx.plain) > wconf["interest"]
+        ):
+            return StepResult(PhaseStatus.WAKE, WakeReason.INTEREST)
+        # 概率唤醒
+        if wconf["prob"] > 0 and random.random() < wconf["prob"]:
+            return StepResult(PhaseStatus.WAKE, WakeReason.PROB)
+        return StepResult(PhaseStatus.PASS)
+
+    def _check_silence(self, ctx: WakeContext) -> StepResult:
+        """沉默逻辑"""
+        # 闭嘴沉默
+        sconf = self.conf["silence"]
+        if sconf["shutup"] < 1:
+            th = self.sent.shut(ctx.plain)
+            if th > sconf["shutup"]:
+                ctx.group.shutup_until = ctx.now + th * sconf["multiple"]
+                return StepResult(PhaseStatus.SILENCE, BlockReason.SHUTUP)
+        # 辱骂沉默
+        if sconf["insult"] < 1:
+            th = self.sent.insult(ctx.plain)
+            if th > sconf["insult"]:
+                ctx.member.silence_until = ctx.now + th * sconf["multiple"]
+                return StepResult(PhaseStatus.SILENCE, BlockReason.INSULT)
+        # 人机沉默
+        if sconf["ai"] < 1:
+            th = self.sent.is_ai(ctx.plain)
+            if th > sconf["ai"]:
+                ctx.member.silence_until = ctx.now + th * sconf["multiple"]
+                return StepResult(PhaseStatus.SILENCE, BlockReason.AI)
+        return StepResult(PhaseStatus.PASS)
+
+
+    # ============================================================
+    # Event Hooks
+    # ============================================================
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=99)
     async def on_group_msg(self, event: AstrMessageEvent):
-        """主入口"""
+        """收到群消息后"""
         chain = event.get_messages()
-        bid: str = event.get_self_id()
-        gid: str = event.get_group_id()
-        uid: str = event.get_sender_id()
-        msg: str = event.message_str
-        g: GroupState = StateManager.get_group(gid)
-
-        # 只处理文本
+        if not chain:
+            return
         plains = [seg.text for seg in chain if isinstance(seg, Plain)]
         plain = " ".join(plains).strip()
         if not plain:
             return
-
-        # 群聊黑白名单 / 用户黑名单
-        if uid == bid:
-            return
-        if self.conf["group_whitelist"] and gid not in self.conf["group_whitelist"]:
-            logger.debug(f"群组{gid}未在白名单中, 忽略此次唤醒")
-            return
-        if gid in self.conf["group_blacklist"] and not event.is_admin():
-            logger.debug(f"群组{gid}已处于黑名单中, 忽略此次唤醒")
-            event.stop_event()
-            return
-        if uid in self.conf.get("user_blacklist", []):
-            logger.debug(f"用户{uid}已处于黑名单中, 忽略此次唤醒")
-            event.stop_event()
-            return
-
-        # 更新成员状态（限制成员缓存数量）
-        if uid not in g.members:
-            if len(g.members) >= self.conf["max_members_cache"]:
-                oldest_uid = min(
-                    g.members.items(),
-                    key=lambda item: max(
-                        item[1].last_wake,
-                        item[1].last_reply,
-                        item[1].silence_until,
-                    ),
-                )[0]
-                g.members.pop(oldest_uid, None)
-                logger.debug(f"[wakepro] 群({gid})裁剪成员缓存：{oldest_uid}")
-
-            g.members[uid] = MemberState(uid=uid)
-
-        member = g.members[uid]
-        now = time.time()
-
-        # 记录阻止原因，只有在会触发唤醒时才真正阻止事件传播
-        block_reason = None
-
-        # 唤醒CD检查
-        if now - member.last_wake < self.conf["wake_cd"]:
-            logger.debug(f"{uid} 处于唤醒CD中, 记录阻止原因")
-            block_reason = "wake_cd"
-
-        # 唤醒违禁词检查
-        if not block_reason and self.conf["wake_forbidden_words"]:
-            for word in self.conf["wake_forbidden_words"]:
-                if not event.is_admin() and word in event.message_str:
-                    logger.debug(f"{uid} 消息中含有唤醒屏蔽词, 记录阻止原因")
-                    block_reason = "forbidden_word"
-                    break
-
-        # 屏蔽内置指令
-        if not block_reason and self.conf["block_builtin"]:
-            if not event.is_admin() and event.message_str in BUILT_CMDS:
-                logger.debug(f"{uid} 触发内置指令, 记录阻止原因")
-                block_reason = "builtin_cmd"
-
-        # 闭嘴检查
-        if not block_reason and g.shutup_until > now:
-            logger.debug(f"Bot处于闭嘴中, 记录阻止{uid}的原因")
-            block_reason = "shutup"
-
-        # 沉默检查（辱骂/人机）
-        if not block_reason and not event.is_admin() and member.silence_until > now:
-            logger.debug(f"处于沉默中, 记录阻止{uid}的原因")
-            block_reason = "silence"
-
-        # 复读屏蔽
-        if not block_reason and self.conf["block_reread"]:
-            cleaned_msg = re.sub(r"[^\w\u4e00-\u9fff]", "", plain).lower()
-            cleaned_bot_msgs = [
-                re.sub(r"[^\w\u4e00-\u9fff]", "", bmsg).lower() for bmsg in g.bot_msgs
-            ]
-            if cleaned_msg in cleaned_bot_msgs:
-                logger.debug(
-                    f"{uid} 发送了与Bot缓存消息相同的内容（忽略符号和空格），记录阻止原因"
-                )
-                block_reason = "reread"
-
-        # 判断是否是指令
-        cmd = msg.split(" ", 1)[0]
-        is_cmd = cmd in self.commands or cmd in BUILT_CMDS
-
-        # 消息缓存与合并
-        if not is_cmd:
-            event.set_extra("orig_message", event.message_str)
-            event.set_extra("timestamp", now)
-            async with member.lock:
-                if (
-                    member.pend
-                    and now - member.pend[-1].get_extra("timestamp")  # type: ignore
-                    < self.conf["pend_cd"]
-                ):
-                    msgs: list[str] = [
-                        e.get_extra("orig_message") or "" for e in member.pend
-                    ]  # type: ignore
-                    for e in member.pend:
-                        e.stop_event()
-                    event.message_str = "。".join(msgs + [event.message_str])
-                    logger.debug(
-                        f"已合并{len(member.pend)}条缓存消息：{event.message_str}"
-                    )
-
-        # 各类唤醒条件
-        wake = event.is_at_or_wake_command
-        wake_reason = ""
-
-        # 前缀唤醒
-        if isinstance(self.wake_prefix, list) and self.wake_prefix:
-            full_msg = next((seg.text for seg in chain if isinstance(seg, Plain)), "")
-            for prefix in self.wake_prefix:
-                if not full_msg.startswith(prefix):
-                    continue
-
-                # 屏蔽前缀指令
-                if  self.conf["block_prefix_cmd"] and not event.is_admin() and is_cmd:
-                    logger.debug(f"{uid} 触发前缀指令, 忽略此次唤醒")
-                    event.stop_event()
-                    return
-
-                # 屏蔽前缀 LLM（即非指令）
-                if self.conf["block_prefix_llm"] and not event.is_admin() and not is_cmd:
-                    logger.debug(f"{uid} 触发前缀LLM, 忽略此次唤醒")
-                    event.stop_event()
-                    return
-
-                # 通过所有过滤，执行唤醒
-                wake = True
-                wake_reason = "prefix"
-                logger.debug(f"{uid} 触发前缀唤醒：{prefix}")
-                break
-
-        # At唤醒
-        for seg in chain:
-            if isinstance(seg, At) and str(seg.qq) == bid:
-                wake = True
-                wake_reason = "at"
-                logger.debug(f"{uid} 触发At唤醒")
-                break
-            elif isinstance(seg, Reply) and str(seg.sender_id) == bid:
-                wake = True
-                wake_reason = "reply"
-                logger.debug(f"{uid} 触发引用回复唤醒")
-                break
-
-        # 提及唤醒
-        if not wake and self.conf["mention_wake"]:
-            names = [n for n in self.conf["mention_wake"] if n]
-            for n in names:
-                if n and n in plain:
-                    wake = True
-                    wake_reason = "mention"
-                    logger.debug(f"{uid} 触发提及唤醒：{n}")
-                    break
-
-        # 唤醒延长（如果已经处于唤醒状态且在 wake_extend 秒内，每个用户单独延长唤醒时间）
-        if (
-            not wake
-            and self.conf["wake_extend"]
-            and member.last_wake_reason in ["at", "reply", "mention"]
-            and (now - member.last_reply) <= int(self.conf["wake_extend"] or 0)
-        ):
-            wake = True
-            wake_reason = "prolong"
-            logger.debug(
-                f"{uid} 唤醒延长, 时间为上次llm回复后的第{now - member.last_reply}秒"
-            )
-
-        # 话题相关性唤醒
-        if not wake and self.conf["relevant_wake"] and g.bot_msgs:
-            simi = self.sim.similarity(
-                group_id=gid, user_msg=plain, bot_msgs=list(g.bot_msgs)
-            )
-            logger.debug(f"话题相关度:{simi}")
-            if simi > self.conf["relevant_wake"]:
-                wake = True
-                wake_reason = "similar"
-                logger.debug(f"{uid} 触发话题相关性唤醒, 相关度：{simi}")
-
-        # 答疑唤醒
-        if (
-            not wake
-            and self.conf["ask_wake"]
-            and (ask_th := self.sent.ask(plain)) > self.conf["ask_wake"]
-        ):
-            wake = True
-            wake_reason = "ask"
-            logger.debug(f"{uid} 触发答疑唤醒, 疑问值：{ask_th}")
-
-        # 无聊唤醒
-        if (
-            not wake
-            and self.conf["bored_wake"]
-            and (bored_th := self.sent.bored(plain)) > self.conf["bored_wake"]
-        ):
-            wake = True
-            wake_reason = "bored"
-            logger.debug(f"{uid} 触发无聊唤醒, 无聊值：{bored_th}")
-
-        # 兴趣唤醒
-        if (
-            not wake
-            and self.conf["interest_wake"]
-
-        ):
-            interest_th = self.interest.calc_interest(plain)
-            logger.debug(f"兴趣值：{interest_th}")
-            if interest_th > self.conf["interest_wake"]:
-                wake = True
-                wake_reason = "interest"
-                logger.debug(f"{uid} 触发兴趣唤醒, 兴趣值：{interest_th}")
-
-        # 概率唤醒
-        if (
-            not wake
-            and self.conf["prob_wake"]
-            and random.random() < self.conf["prob_wake"]
-        ):
-            wake = True
-            wake_reason = "prob"
-            logger.debug(f"{uid} 触发概率唤醒")
-
-        # 应用阻止规则（只有在会触发唤醒时才真正阻止事件传播到其他插件）
-        if wake and block_reason:
-            logger.debug(f"{uid} 触发了唤醒但因 {block_reason} 被阻止")
-            event.stop_event()
-            return
-
-        # 触发唤醒
-        if wake:
-            # 缓存消息
-            if cmd not in self.commands:
-                member.pend.append(event)
-                logger.debug(f"已添加event到缓存：{len(member.pend)}")
-
-            # 触发唤醒
-            event.is_at_or_wake_command = True
-            # 记录唤醒时间
-            member.last_wake = now
-            # 记录原因
-            member.last_wake_reason = wake_reason
-
-
-        # 闭嘴机制(对当前群聊闭嘴)
-        if self.conf["shutup"]:
-            shut_th = self.sent.shut(plain)
-            if shut_th > self.conf["shutup"]:
-                silence_sec = shut_th * self.conf["silence_multiple"]
-                g.shutup_until = now + silence_sec
-                reason = f"闭嘴沉默{silence_sec}秒"
-                logger.debug(f"[wakepro] 群({gid}){reason}：{plain}")
-                event.stop_event()
-                return
-
-        # 辱骂沉默机制(对单个用户沉默)
-        if self.conf["insult"]:
-            insult_th = self.sent.insult(plain)
-            if insult_th > self.conf["insult"]:
-                silence_sec = insult_th * self.conf["silence_multiple"]
-                member.silence_until = now + silence_sec
-                reason = "insult"
-                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{plain}")
-                # event.stop_event() 本轮对话不沉默，方便回怼
-                return
-
-        # AI沉默机制(对单个用户沉默)
-        if self.conf["ai"]:
-            ai_th = self.sent.is_ai(plain)
-            if ai_th > self.conf["ai"]:
-                silence_sec = ai_th * self.conf["silence_multiple"]
-                member.silence_until = now + silence_sec
-                reason = "silence"
-                logger.info(f"[wakepro] 群({gid})用户({uid}){reason}：{plain}")
-                event.stop_event()
-                return
+        first_arg = event.message_str.split(" ", 1)[0]
+        cmd = (
+            first_arg if first_arg in self.commands or first_arg in BUILT_CMDS else None
+        )
+        gid = event.get_group_id()
+        uid = event.get_sender_id()
+        bid = event.get_self_id()
+        group: GroupState = StateManager.get_group(gid)
+        if uid not in group.members:
+            group.members[uid] = MemberState(uid=uid)
+        ctx = WakeContext(
+            event=event,
+            chain=chain,
+            plain=plain,
+            cmd=cmd,
+            is_admin=event.is_admin(),
+            gid=gid,
+            uid=uid,
+            bid=bid,
+            group=group,
+            member=group.members[uid],
+            now=time.time(),
+        )
+        self.pipeline.run(ctx)
 
     @filter.on_decorating_result(priority=20)
-    async def on_message(self, event: AstrMessageEvent):
-        """发送消息前，缓存bot消息，清空用户消息缓存"""
+    async def on_decorating_result(self, event: AstrMessageEvent):
+        """消息发送前"""
         gid: str = event.get_group_id()
         uid: str = event.get_sender_id()
         result = event.get_result()
         if not gid or not uid or not result:
             return
         g: GroupState = StateManager.get_group(gid)
-        # 缓存bot消息
         g.bot_msgs.append(result.get_plain_text())
         member = g.members.get(uid)
         if not member:
             return
-        # 记录回复时间
         member.last_reply = time.time()
-        # 清空用户消息缓存
-        async with member.lock:
-            member.pend.clear()
