@@ -158,7 +158,7 @@ class WakePlugin(Star):
         if len(lconf["white_groups"]) > 0 and ctx.gid not in lconf["white_groups"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.WHITE_GROUP)
         # 过滤群聊黑名单
-        if ctx.gid in lconf["black_groups"] and not ctx.is_admin:
+        if ctx.gid in lconf["black_groups"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.BLACK_GROUP)
         # 过滤用户黑名单
         if ctx.uid in lconf["black_users"]:
@@ -171,7 +171,7 @@ class WakePlugin(Star):
         # 违禁词阻塞
         if bconf["keywords"]:
             for w in bconf["keywords"]:
-                if w in ctx.plain and not ctx.is_admin:
+                if w in ctx.plain:
                     return StepResult(PhaseStatus.BLOCK, BlockReason.FORBIDDEN)
         # 复读阻塞
         if bconf["reread"]:
@@ -195,17 +195,17 @@ class WakePlugin(Star):
         """检查指令逻辑"""
         cconf = self.conf["cmd"]
         # 屏蔽内置指令
-        if cconf["block_builtin"] and ctx.cmd in BUILT_CMDS and not ctx.is_admin:
+        if cconf["block_builtin"] and ctx.cmd in BUILT_CMDS:
             return StepResult(PhaseStatus.BLOCK, BlockReason.BUILTIN)
 
         seg = ctx.chain[0] if ctx.chain and isinstance(ctx.chain[0], Plain) else None
         if not seg or not any(seg.text.startswith(p) for p in self.wake_prefix):
             return StepResult(PhaseStatus.PASS)
         # 屏蔽前缀触发指令
-        if ctx.cmd and cconf["block_prefix_cmd"] and not ctx.is_admin:
+        if ctx.cmd and cconf["block_prefix_cmd"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.PREFIX_CMD)
         # 屏蔽前缀触发LLM
-        if not ctx.cmd and cconf["block_prefix_llm"] and not ctx.is_admin:
+        if not ctx.cmd and cconf["block_prefix_llm"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.PREFIX_LLM)
         # 前缀唤醒
         return StepResult(PhaseStatus.WAKE, WakeReason.PREFIX)

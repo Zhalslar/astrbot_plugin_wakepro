@@ -43,8 +43,7 @@
                 "default": [
                     "list(名单检查)",
                     "block(多级阻塞)",
-                    "cmd(指令屏蔽)",
-                    "silence(沉默检测)"
+                    "cmd(指令屏蔽)"
                 ]
             }
         }
@@ -62,7 +61,7 @@
             },
             "black_groups": {
                 "description": "群聊黑名单",
-                "hint": "屏蔽黑名单中的群聊，该群消息无法唤醒bot(但bot管理员不受影响)",
+                "hint": "屏蔽黑名单中的群聊，该群消息无法唤醒bot",
                 "type": "list",
                 "default": []
             },
@@ -76,12 +75,12 @@
     },
     "block": {
         "description": "【多级阻塞】",
-        "hint": "设置屏蔽词后，当用户输入的消息包含这些词时，bot将不会被唤醒，但bot管理员不受影响",
+        "hint": "",
         "type": "object",
         "items": {
             "keywords": {
                 "description": "屏蔽词",
-                "hint": "当用户输入的消息包含这些词时，bot将不会被唤醒，但bot管理员不受影响",
+                "hint": "当用户输入的消息包含这些词时，bot将不会被唤醒",
                 "type": "list",
                 "default": [
                     "政治",
@@ -115,19 +114,19 @@
         "items": {
             "block_builtin": {
                 "description": "禁止使用内置指令",
-                "hint": "内置指令即指Astrbot自带的命令，如help, tts, llm等，内置指令被屏蔽后不再会唤醒bot(但bot管理员不受影响), 从而让你的bot更像真人",
+                "hint": "内置指令即指Astrbot自带的命令，如help, tts, llm等，内置指令被屏蔽后不再会唤醒bot, 从而让你的bot更像真人",
                 "type": "bool",
                 "default": false
             },
             "block_prefix_cmd": {
                 "description": "禁止使用前缀触发指令",
-                "hint": "开启后，即使用户使用前缀，也无法触发指令，但llm不受影响、bot管理员不受影响",
+                "hint": "开启后，即使用户使用前缀，也无法触发指令，但llm不受影响",
                 "type": "bool",
                 "default": false
             },
             "block_prefix_llm": {
                 "description": "禁止使用前缀唤醒LLM",
-                "hint": "开启后，即使用户使用前缀，也无法唤醒llm，但指令不受影响、bot管理员不受影响",
+                "hint": "开启后，即使用户使用前缀，也无法唤醒llm，但指令不受影响",
                 "type": "bool",
                 "default": false
             }
