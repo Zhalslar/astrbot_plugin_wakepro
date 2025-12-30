@@ -23,7 +23,7 @@ from .core.model import (
 )
 from .core.sentiment import Sentiment
 from .core.similarity import Similarity
-from .core.utils import BUILT_CMDS, get_all_commands
+from .core.utils import get_all_commands
 
 # ============================================================
 # Pipeline Core
@@ -83,7 +83,7 @@ class Pipeline:
                 ctx.member.last_wake_reason = ret.reason
                 ctx.event.is_at_or_wake_command = True
                 logger.debug(f"{ctx.uid} 唤醒: {reason}")
-                break
+                #break # 不阻塞，否则沉默逻辑失效
             elif ret.status == PhaseStatus.SILENCE:
                 logger.debug(f"{ctx.uid} 沉默: {reason}")
                 break
@@ -183,19 +183,13 @@ class WakePlugin(Star):
         # 唤醒CD阻塞
         if bconf["wake_cd"] > 0 and ctx.now - ctx.member.last_wake < bconf["wake_cd"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.WAKE_CD)
-        # 闭嘴机制阻塞
-        if ctx.group.shutup_until > ctx.now:
-            return StepResult(PhaseStatus.BLOCK, BlockReason.SHUTUP)
-        # 沉默机制阻塞
-        if ctx.member.silence_until > ctx.now:
-            return StepResult(PhaseStatus.BLOCK, BlockReason.SILENCE)
+
         return StepResult(PhaseStatus.PASS)
 
     def _check_cmd(self, ctx: WakeContext) -> StepResult:
         """检查指令逻辑"""
         cconf = self.conf["cmd"]
-        # 屏蔽内置指令
-        if cconf["block_builtin"] and ctx.cmd in BUILT_CMDS:
+        if cconf["block_builtin"] and ctx.cmd in cconf["builtin_cmds"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.BUILTIN)
 
         seg = ctx.chain[0] if ctx.chain and isinstance(ctx.chain[0], Plain) else None
@@ -212,6 +206,12 @@ class WakePlugin(Star):
 
     def _check_wake(self, ctx: WakeContext) -> StepResult:
         """唤醒规则判断"""
+        # 前置条件：已沉默，禁止一切唤醒
+        if ctx.group.shutup_until > ctx.now:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.SHUTUP)
+        if ctx.member.silence_until > ctx.now:
+            return StepResult(PhaseStatus.BLOCK, BlockReason.SILENCE)
+
         wconf = self.conf["wake"]
         for seg in ctx.chain:
             # 艾特唤醒
@@ -256,7 +256,11 @@ class WakePlugin(Star):
         return StepResult(PhaseStatus.PASS)
 
     def _check_silence(self, ctx: WakeContext) -> StepResult:
-        """沉默逻辑"""
+        """沉默逻辑（仅在已唤醒后生效）"""
+        # 前置条件：已唤醒，才允许沉默
+        if not ctx.event.is_at_or_wake_command:
+            return StepResult(PhaseStatus.PASS)
+
         # 闭嘴沉默
         sconf = self.conf["silence"]
         if sconf["shutup"] < 1:
@@ -294,7 +298,7 @@ class WakePlugin(Star):
             return
         first_arg = event.message_str.split(" ", 1)[0]
         cmd = (
-            first_arg if first_arg in self.commands or first_arg in BUILT_CMDS else None
+            first_arg if first_arg in self.commands else None
         )
         gid = event.get_group_id()
         uid = event.get_sender_id()
