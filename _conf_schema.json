@@ -35,14 +35,14 @@
                 "type": "list",
                 "options": [
                     "list(名单检查)",
-                    "block(多级阻塞)",
+                    "block(阻塞判断)",
                     "cmd(指令屏蔽)",
                     "wake(智能唤醒)",
                     "silence(沉默检测)"
                 ],
                 "default": [
                     "list(名单检查)",
-                    "block(多级阻塞)",
+                    "block(阻塞判断)",
                     "cmd(指令屏蔽)"
                 ]
             }
