@@ -165,7 +165,7 @@ class WakePlugin(Star):
         ):
             return StepResult(PhaseStatus.BLOCK, BlockReason.QQBOT)
         # 过滤用户白名单
-        if len(lconf["white_users"]) > 0 and ctx.gid not in lconf["white_users"]:
+        if len(lconf["white_users"]) > 0 and ctx.uid not in lconf["white_users"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.WHITE_USER)
         # 过滤群聊白名单
         if len(lconf["white_groups"]) > 0 and ctx.gid not in lconf["white_groups"]:
