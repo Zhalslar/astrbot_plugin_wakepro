@@ -1,7 +1,7 @@
-name: astrbot_plugin_wakepro # 这是你的插件的唯一识别名。
+name: astrbot_plugin_wakepro
 display_name: 唤醒增强
-desc: 更强大的唤醒增强插件：提及唤醒、唤醒延长、空@唤醒、话题相关性唤醒、答疑唤醒、无聊唤醒、闭嘴机制、被骂沉默机制 # 插件简短描述
-help: 略  # 插件的帮助信息
-version: v2.0.1 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: Zhalslar # 作者
-repo: https://github.com/Zhalslar/astrbot_plugin_wakepro # 插件的仓库地址
+desc: Astrbot唤醒管道：名单过滤 → 阻塞判断 → 指令屏蔽 → 智能唤醒 → 沉默检测
+help: 略
+version: v2.0.1
+author: Zhalslar
+repo: https://github.com/Zhalslar/astrbot_plugin_wakepro
