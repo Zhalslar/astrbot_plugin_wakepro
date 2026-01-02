@@ -169,13 +169,21 @@ class WakePlugin(Star):
         if len(lconf["white_users"]) > 0 and ctx.uid not in lconf["white_users"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.WHITE_USER)
         # 过滤群聊白名单
-        if len(lconf["white_groups"]) > 0 and ctx.gid not in lconf["white_groups"]:
+        if (
+            len(lconf["white_groups"]) > 0
+            and ctx.gid
+            and ctx.gid not in lconf["white_groups"]
+        ):
             return StepResult(PhaseStatus.BLOCK, BlockReason.WHITE_GROUP)
         # 过滤用户黑名单
-        if ctx.uid in lconf["black_users"]:
+        if len(lconf["black_users"]) > 0 and ctx.uid in lconf["black_users"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.BLACK_USER)
         # 过滤群聊黑名单
-        if ctx.gid in lconf["black_groups"]:
+        if (
+            len(lconf["black_groups"]) > 0
+            and ctx.gid
+            and ctx.gid in lconf["black_groups"]
+        ):
             return StepResult(PhaseStatus.BLOCK, BlockReason.BLACK_GROUP)
         return StepResult(PhaseStatus.PASS)
 
