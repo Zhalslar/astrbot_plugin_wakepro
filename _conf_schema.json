@@ -55,7 +55,7 @@
         "items": {
             "block_self": {
                 "description": "屏蔽Bot自身的消息",
-                "hint": "当 消息发送者ID 等于 Bot自身ID 时，消息将被屏蔽",
+                "hint": "当 消息发送者ID 等于 Bot自身ID 时，消息将被屏蔽。 注意可能导致无法接收好友申请、群邀请事件",
                 "type": "bool",
                 "default": false
             },

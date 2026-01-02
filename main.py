@@ -182,14 +182,16 @@ class WakePlugin(Star):
         """block 规则判断"""
         bconf = self.conf["block"]
         # 违禁词阻塞
-        if bconf["keywords"]:
+        if bconf["keywords"] and ctx.plain:
             for w in bconf["keywords"]:
                 if w in ctx.plain:
                     return StepResult(PhaseStatus.BLOCK, BlockReason.FORBIDDEN)
         # 复读阻塞
-        if bconf["reread"]:
+        if bconf["reread"] and ctx.plain:
             cleaned = re.sub(r"[^\w\u4e00-\u9fff]", "", ctx.plain).lower()
             for msg in ctx.group.bot_msgs:
+                if not msg:
+                    continue
                 m = re.sub(r"[^\w\u4e00-\u9fff]", "", msg).lower()
                 if cleaned == m:
                     return StepResult(PhaseStatus.BLOCK, BlockReason.REREAD)
@@ -202,7 +204,7 @@ class WakePlugin(Star):
     def _check_cmd(self, ctx: WakeContext) -> StepResult:
         """检查指令逻辑"""
         cconf = self.conf["cmd"]
-        if cconf["block_builtin"] and ctx.cmd in cconf["builtin_cmds"]:
+        if cconf["block_builtin"] and ctx.cmd and ctx.cmd in cconf["builtin_cmds"]:
             return StepResult(PhaseStatus.BLOCK, BlockReason.BUILTIN)
 
         seg = ctx.chain[0] if ctx.chain and isinstance(ctx.chain[0], Plain) else None
@@ -234,7 +236,7 @@ class WakePlugin(Star):
             if isinstance(seg, Reply) and str(seg.sender_id) == ctx.bid:
                 return StepResult(PhaseStatus.WAKE, WakeReason.REPLY)
         # 提及唤醒
-        if len(wconf["names"]) > 0:
+        if len(wconf["names"]) > 0 and ctx.plain:
             for name in wconf["names"]:
                 if name in ctx.plain:
                     return StepResult(PhaseStatus.WAKE, WakeReason.MENTION)
@@ -247,19 +249,20 @@ class WakePlugin(Star):
         ):
             return StepResult(PhaseStatus.WAKE, WakeReason.PROLONG)
         # 相关性唤醒
-        if wconf["similar"] < 1 and ctx.group.bot_msgs:
+        if wconf["similar"] < 1 and ctx.group.bot_msgs and ctx.plain:
             sim = self.sim.similarity(ctx.gid, ctx.plain, list(ctx.group.bot_msgs))
             if sim > wconf["similar"]:
                 return StepResult(PhaseStatus.WAKE, WakeReason.SIMILAR)
         # 答疑唤醒
-        if wconf["ask"] < 1 and self.sent.ask(ctx.plain) > wconf["ask"]:
+        if wconf["ask"] < 1 and ctx.plain and self.sent.ask(ctx.plain) > wconf["ask"]:
             return StepResult(PhaseStatus.WAKE, WakeReason.ASK)
         # 无聊唤醒
-        if wconf["bored"] < 1 and self.sent.bored(ctx.plain) > wconf["bored"]:
+        if wconf["bored"] < 1 and ctx.plain and self.sent.bored(ctx.plain) > wconf["bored"]:
             return StepResult(PhaseStatus.WAKE, WakeReason.BORED)
         # 兴趣唤醒
         if (
             wconf["interest"] < 1
+            and ctx.plain
             and self.interest.calc_interest(ctx.plain) > wconf["interest"]
         ):
             return StepResult(PhaseStatus.WAKE, WakeReason.INTEREST)
@@ -276,19 +279,19 @@ class WakePlugin(Star):
 
         # 闭嘴沉默
         sconf = self.conf["silence"]
-        if sconf["shutup"] < 1:
+        if sconf["shutup"] < 1 and ctx.plain:
             th = self.sent.shut(ctx.plain)
             if th > sconf["shutup"]:
                 ctx.group.shutup_until = ctx.now + th * sconf["multiple"]
                 return StepResult(PhaseStatus.SILENCE, BlockReason.SHUTUP)
         # 辱骂沉默
-        if sconf["insult"] < 1:
+        if sconf["insult"] < 1 and ctx.plain:
             th = self.sent.insult(ctx.plain)
             if th > sconf["insult"]:
                 ctx.member.silence_until = ctx.now + th * sconf["multiple"]
                 return StepResult(PhaseStatus.SILENCE, BlockReason.INSULT)
         # 人机沉默
-        if sconf["ai"] < 1:
+        if sconf["ai"] < 1 and ctx.plain:
             th = self.sent.is_ai(ctx.plain)
             if th > sconf["ai"]:
                 ctx.member.silence_until = ctx.now + th * sconf["multiple"]
@@ -299,16 +302,12 @@ class WakePlugin(Star):
     # Event Hooks
     # ============================================================
 
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=99)
+    @filter.event_message_type(filter.EventMessageType.ALL, priority=99999)
     async def on_group_msg(self, event: AstrMessageEvent):
-        """收到群消息后"""
+        """收到消息后"""
         chain = event.get_messages()
-        if not chain:
-            return
         plains = [seg.text for seg in chain if isinstance(seg, Plain)]
         plain = " ".join(plains).strip()
-        if not plain:
-            return
         first_arg = event.message_str.split(" ", 1)[0]
         cmd = first_arg if first_arg in self.commands else None
         gid = event.get_group_id()
