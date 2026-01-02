@@ -156,6 +156,6 @@ class WakeContext:
     gid: str
     uid: str
     bid: str
-    group: GroupState
-    member: MemberState
+    group: GroupState | None
+    member: MemberState | None
     now: float
