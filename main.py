@@ -82,8 +82,9 @@ class Pipeline:
                 logger.debug(f"{ctx.uid} 阻塞: {reason}")
                 break
             elif ret.status == PhaseStatus.WAKE:
-                ctx.member.last_wake = ctx.now
-                ctx.member.last_wake_reason = ret.reason
+                if ctx.member:
+                    ctx.member.last_wake = ctx.now
+                    ctx.member.last_wake_reason = ret.reason
                 ctx.event.is_at_or_wake_command = True
                 logger.debug(f"{ctx.uid} 唤醒: {reason}")
                 # break # 不阻塞，否则沉默逻辑失效
@@ -187,7 +188,7 @@ class WakePlugin(Star):
                 if w in ctx.plain:
                     return StepResult(PhaseStatus.BLOCK, BlockReason.FORBIDDEN)
         # 复读阻塞
-        if bconf["reread"] and ctx.plain:
+        if bconf["reread"] and ctx.plain and ctx.group:
             cleaned = re.sub(r"[^\w\u4e00-\u9fff]", "", ctx.plain).lower()
             for msg in ctx.group.bot_msgs:
                 if not msg:
@@ -196,7 +197,11 @@ class WakePlugin(Star):
                 if cleaned == m:
                     return StepResult(PhaseStatus.BLOCK, BlockReason.REREAD)
         # 唤醒CD阻塞
-        if bconf["wake_cd"] > 0 and ctx.now - ctx.member.last_wake < bconf["wake_cd"]:
+        if (
+            bconf["wake_cd"] > 0
+            and ctx.member
+            and ctx.now - ctx.member.last_wake < bconf["wake_cd"]
+        ):
             return StepResult(PhaseStatus.BLOCK, BlockReason.WAKE_CD)
 
         return StepResult(PhaseStatus.PASS)
@@ -222,9 +227,9 @@ class WakePlugin(Star):
     def _check_wake(self, ctx: WakeContext) -> StepResult:
         """唤醒规则判断"""
         # 前置条件：已沉默，禁止一切唤醒
-        if ctx.group.shutup_until > ctx.now:
+        if ctx.group and ctx.group.shutup_until > ctx.now:
             return StepResult(PhaseStatus.BLOCK, BlockReason.SHUTUP)
-        if ctx.member.silence_until > ctx.now:
+        if ctx.member and ctx.member.silence_until > ctx.now:
             return StepResult(PhaseStatus.BLOCK, BlockReason.SILENCE)
 
         wconf = self.conf["wake"]
@@ -243,13 +248,14 @@ class WakePlugin(Star):
         # 唤醒延长
         if (
             wconf["prolong"] > 0
+            and ctx.member
             and ctx.member.last_wake_reason
             in {WakeReason.AT, WakeReason.REPLY, WakeReason.MENTION}
             and ctx.now - ctx.member.last_reply <= wconf["prolong"]
         ):
             return StepResult(PhaseStatus.WAKE, WakeReason.PROLONG)
         # 相关性唤醒
-        if wconf["similar"] < 1 and ctx.group.bot_msgs and ctx.plain:
+        if wconf["similar"] < 1 and ctx.group and ctx.group.bot_msgs and ctx.plain:
             sim = self.sim.similarity(ctx.gid, ctx.plain, list(ctx.group.bot_msgs))
             if sim > wconf["similar"]:
                 return StepResult(PhaseStatus.WAKE, WakeReason.SIMILAR)
@@ -257,7 +263,11 @@ class WakePlugin(Star):
         if wconf["ask"] < 1 and ctx.plain and self.sent.ask(ctx.plain) > wconf["ask"]:
             return StepResult(PhaseStatus.WAKE, WakeReason.ASK)
         # 无聊唤醒
-        if wconf["bored"] < 1 and ctx.plain and self.sent.bored(ctx.plain) > wconf["bored"]:
+        if (
+            wconf["bored"] < 1
+            and ctx.plain
+            and self.sent.bored(ctx.plain) > wconf["bored"]
+        ):
             return StepResult(PhaseStatus.WAKE, WakeReason.BORED)
         # 兴趣唤醒
         if (
@@ -279,19 +289,19 @@ class WakePlugin(Star):
 
         # 闭嘴沉默
         sconf = self.conf["silence"]
-        if sconf["shutup"] < 1 and ctx.plain:
+        if sconf["shutup"] < 1 and ctx.plain and ctx.group:
             th = self.sent.shut(ctx.plain)
             if th > sconf["shutup"]:
                 ctx.group.shutup_until = ctx.now + th * sconf["multiple"]
                 return StepResult(PhaseStatus.SILENCE, BlockReason.SHUTUP)
         # 辱骂沉默
-        if sconf["insult"] < 1 and ctx.plain:
+        if sconf["insult"] < 1 and ctx.plain and ctx.member:
             th = self.sent.insult(ctx.plain)
             if th > sconf["insult"]:
                 ctx.member.silence_until = ctx.now + th * sconf["multiple"]
                 return StepResult(PhaseStatus.SILENCE, BlockReason.INSULT)
         # 人机沉默
-        if sconf["ai"] < 1 and ctx.plain:
+        if sconf["ai"] < 1 and ctx.plain and ctx.member:
             th = self.sent.is_ai(ctx.plain)
             if th > sconf["ai"]:
                 ctx.member.silence_until = ctx.now + th * sconf["multiple"]
@@ -313,8 +323,8 @@ class WakePlugin(Star):
         gid = event.get_group_id()
         uid = event.get_sender_id()
         bid = event.get_self_id()
-        group: GroupState = StateManager.get_group(gid)
-        if uid not in group.members:
+        group = StateManager.get_group(gid) if gid else None
+        if group and uid not in group.members:
             group.members[uid] = MemberState(uid=uid)
         ctx = WakeContext(
             event=event,
@@ -326,7 +336,7 @@ class WakePlugin(Star):
             uid=uid,
             bid=bid,
             group=group,
-            member=group.members[uid],
+            member=group.members[uid] if group else None,
             now=time.time(),
         )
         self.pipeline.run(ctx)
