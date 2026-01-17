@@ -2,6 +2,6 @@ name: astrbot_plugin_wakepro
 display_name: 唤醒增强
 desc: Astrbot唤醒管道：名单过滤 → 阻塞判断 → 指令屏蔽 → 智能唤醒 → 沉默检测
 help: 略
-version: v2.0.3
+version: v2.1.0
 author: Zhalslar
 repo: https://github.com/Zhalslar/astrbot_plugin_wakepro

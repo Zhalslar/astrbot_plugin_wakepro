@@ -304,3 +304,6 @@ class Sentiment:
         """
         words = cls._seg(text)
         return cls._calculate_confidence(words, cls.AI_WORDS)
+
+# 全局单例
+sentiment = Sentiment()

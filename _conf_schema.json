@@ -15,14 +15,14 @@
                 "hint": "勾选表示启用该步骤；未锁定顺序时，将按当前列表顺序执行",
                 "type": "list",
                 "options": [
-                    "list(名单过滤)",
+                    "gate(名单过滤)",
                     "block(阻塞判断)",
                     "cmd(指令屏蔽)",
                     "wake(智能唤醒)",
                     "silence(沉默检测)"
                 ],
                 "default": [
-                    "list(名单过滤)",
+                    "gate(名单过滤)",
                     "block(阻塞判断)",
                     "cmd(指令屏蔽)",
                     "wake(智能唤醒)",
@@ -34,21 +34,21 @@
                 "hint": "勾选后，该步骤对Bot管理员无效",
                 "type": "list",
                 "options": [
-                    "list(名单检查)",
+                    "gate(名单检查)",
                     "block(阻塞判断)",
                     "cmd(指令屏蔽)",
                     "wake(智能唤醒)",
                     "silence(沉默检测)"
                 ],
                 "default": [
-                    "list(名单检查)",
+                    "gate(名单检查)",
                     "block(阻塞判断)",
                     "cmd(指令屏蔽)"
                 ]
             }
         }
     },
-    "list": {
+    "gate": {
         "description": "【名单过滤】",
         "hint": "注意检查顺序：屏蔽自身 -> 屏蔽机器人 -> 用户白名单 -> 群聊白名单 -> 用户黑名单 -> 群聊黑名单",
         "type": "object",
@@ -385,7 +385,7 @@
             },
             "wake_cd": {
                 "description": "唤醒CD(秒)",
-                "hint": "唤醒bot的CD(冷却时间)，每个成员单独计CD，bot处于唤醒CD时拒收该成员的一切消息，此CD优先级比其他CD高，建议别设太大，会影响挂起和唤醒延长的效果。 设为 0 表示关闭CD",
+                "hint": "唤醒bot的CD(冷却时间)，每个成员单独计CD，bot处于唤醒CD时拒收该成员的一切消息。 设为 0 表示关闭CD",
                 "type": "float",
                 "slider": {
                     "min": 0,
