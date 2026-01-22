@@ -95,6 +95,8 @@ class WakeContext:
     """命令"""
     is_admin: bool
     """是否为管理员事件"""
+    umo: str
+    """会话 ID"""
     gid: str
     """群组 ID"""
     uid: str
@@ -110,7 +112,6 @@ class WakeContext:
 
 
 class StepName(str, Enum):
-    GATE = "gate"
     BLOCK = "block"
     COMMAND = "command"
     SILENCE = "silence"

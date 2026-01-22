@@ -16,6 +16,7 @@ class WakeStep(BaseStep):
     def __init__(self, config: PluginConfig):
         super().__init__(config)
         self.cfg = config.wake
+        self.blacklist = config.blacklist
         self.interest = Interest(self.cfg._interest_words)
         self.similarity = Similarity()
 
@@ -25,6 +26,13 @@ class WakeStep(BaseStep):
             return StepResult(wake=False, abort=True, msg="已沉默该群聊，禁止唤醒")
         if ctx.member and ctx.member.silence_until > ctx.now:
             return StepResult(wake=False, abort=True, msg="已沉默该用户，禁止唤醒")
+
+        # 跳过黑名单
+        if self.in_blacklist(ctx):
+            return StepResult(abort=True, msg="黑名单会话，跳过智能唤醒")
+        # 跳过指令消息
+        if ctx.cmd:
+            return StepResult(abort=True, msg="指令消息，跳过智能唤醒")
 
         for seg in ctx.chain:
             # 艾特唤醒

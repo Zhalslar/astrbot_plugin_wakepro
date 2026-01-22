@@ -1,100 +1,121 @@
 # config.py
 from __future__ import annotations
 
-from collections.abc import MutableMapping
-from typing import Any, get_type_hints
+from collections.abc import Mapping, MutableMapping
+from types import MappingProxyType, UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
+from astrbot.api import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.context import Context
 
-# ==================================================
-# 基础 Section
-# ==================================================
 
-
-class Section:
+class ConfigNode:
     """
-    强类型配置节点
-    - 字段由注解声明
-    - 数据直接映射到底层 dict
+    配置节点, 把 dict 变成强类型对象。
+
+    规则：
+    - schema 来自子类类型注解
+    - 声明字段：读写，写回底层 dict
+    - 未声明字段和下划线字段：仅挂载属性，不写回
+    - 支持 ConfigNode 多层嵌套（lazy + cache）
     """
 
-    __slots__ = ("_data",)
+    _SCHEMA_CACHE: dict[type, dict[str, type]] = {}
+    _FIELDS_CACHE: dict[type, set[str]] = {}
+
+    @classmethod
+    def _schema(cls) -> dict[str, type]:
+        return cls._SCHEMA_CACHE.setdefault(cls, get_type_hints(cls))
+
+    @classmethod
+    def _fields(cls) -> set[str]:
+        return cls._FIELDS_CACHE.setdefault(
+            cls,
+            {k for k in cls._schema() if not k.startswith("_")},
+        )
+
+    @staticmethod
+    def _is_optional(tp: type) -> bool:
+        if get_origin(tp) in (Union, UnionType):
+            return type(None) in get_args(tp)
+        return False
 
     def __init__(self, data: MutableMapping[str, Any]):
         object.__setattr__(self, "_data", data)
-
-        hints = get_type_hints(self.__class__)
-        for key in hints:
-            if key not in data:
-                raise KeyError(f"缺少配置字段: {key}")
+        object.__setattr__(self, "_children", {})
+        for key, tp in self._schema().items():
+            if key.startswith("_"):
+                continue
+            if key in data:
+                continue
+            if hasattr(self.__class__, key):
+                continue
+            if self._is_optional(tp):
+                continue
+            logger.warning(f"[config:{self.__class__.__name__}] 缺少字段: {key}")
 
     def __getattr__(self, key: str) -> Any:
-        try:
-            return self._data[key]
-        except KeyError:
-            raise AttributeError(key) from None
+        if key in self._fields():
+            value = self._data.get(key)
+            tp = self._schema().get(key)
+
+            if isinstance(tp, type) and issubclass(tp, ConfigNode):
+                children: dict[str, ConfigNode] = self.__dict__["_children"]
+                if key not in children:
+                    if not isinstance(value, MutableMapping):
+                        raise TypeError(
+                            f"[config:{self.__class__.__name__}] "
+                            f"字段 {key} 期望 dict，实际是 {type(value).__name__}"
+                        )
+                    children[key] = tp(value)
+                return children[key]
+
+            return value
+
+        if key in self.__dict__:
+            return self.__dict__[key]
+
+        raise AttributeError(key)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key.startswith("_"):
-            object.__setattr__(self, key, value)
-        else:
+        if key in self._fields():
             self._data[key] = value
+            return
+        object.__setattr__(self, key, value)
 
-    def raw(self) -> MutableMapping[str, Any]:
-        return self._data
+    def raw_data(self) -> Mapping[str, Any]:
+        """
+        底层配置 dict 的只读视图
+        """
+        return MappingProxyType(self._data)
 
-
-# ==================================================
-# Section 定义
-# ==================================================
-
-
-class PipelineConfig(Section):
-    lock_order: bool
-    steps: list[str]
-    admin_steps: list[str]
-
-    def __init__(self, data: MutableMapping[str, Any]):
-        super().__init__(data)
-
-        self._steps = self._normalize(self.steps)
-        self._admin_steps = self._normalize(self.admin_steps)
-
-    @staticmethod
-    def _normalize(steps: list[str]) -> list[str]:
-        return [s.split("(", 1)[0].strip() for s in steps]
-
-    def is_enabled_step(self, step: str) -> bool:
-        return step in self._steps
-
-    def is_admin_step(self, step: str) -> bool:
-        return step in self._admin_steps
+    def save_config(self) -> None:
+        """
+        保存配置到磁盘（仅允许在根节点调用）
+        """
+        if not isinstance(self._data, AstrBotConfig):
+            raise RuntimeError(
+                f"{self.__class__.__name__}.save_config() 只能在根配置节点上调用"
+            )
+        self._data.save_config()
 
 
-class GateConfig(Section):
-    block_self: bool
-    block_qqbot: bool
-    white_users: list[str]
-    white_groups: list[str]
-    black_users: list[str]
-    black_groups: list[str]
-
-
-class BlockConfig(Section):
-    keywords: list[str]
-    reread: bool
+class BlockConfig(ConfigNode):
     wake_cd: float
+    block_qqbot: bool
+    reread: bool
+    keywords: list[str]
 
 
-class CmdConfig(Section):
+class CommandConfig(ConfigNode):
     builtin_cmds: list[str]
     block_builtin: bool
     block_prefix_cmd: bool
     block_prefix_llm: bool
 
 
-class WakeConfig(Section):
+class WakeConfig(ConfigNode):
     names: list[str]
     prolong: float
     similar: float
@@ -109,58 +130,33 @@ class WakeConfig(Section):
         self._interest_words = [w.split() for w in self.interest_words_str]
 
 
-class SilenceConfig(Section):
+class SilenceConfig(ConfigNode):
     shutup: float
     insult: float
     ai: float
     multiple: float
 
 
-# ==================================================
-# Facade
-# ==================================================
-
-
-class TypedConfigFacade:
-    __annotations__: dict[str, type]
-
-    def __init__(self, cfg: AstrBotConfig):
-        object.__setattr__(self, "_cfg", cfg)
-
-        hints = get_type_hints(self.__class__)
-        for key, tp in hints.items():
-            if key.startswith("_"):
-                continue
-            if not isinstance(tp, type) or not issubclass(tp, Section):
-                continue
-            if key not in cfg:
-                raise KeyError(f"缺少配置段: {key}")
-
-            section = tp(cfg[key])
-            object.__setattr__(self, key, section)
-
-    def __getattr__(self, key: str) -> Any:
-        return self._cfg[key]
-
-    def save(self):
-        self._cfg.save_config()
-
-
-# ==================================================
-# 插件配置入口
-# ==================================================
-
-
-class PluginConfig(TypedConfigFacade):
-    pipeline: PipelineConfig
-    gate: GateConfig
+class PluginConfig(ConfigNode):
+    global_blacklist: list[str]
+    blacklist: list[str]
+    whitelist: list[str]
+    command: CommandConfig
     block: BlockConfig
-    cmd: CmdConfig
     wake: WakeConfig
     silence: SilenceConfig
 
-    def __init__(self, config: AstrBotConfig, *, context: Context):
+    def __init__(self, config: AstrBotConfig, context: Context):
         super().__init__(config)
         self.context = context
         self.wake_prefix: list[str] = self.context.get_config().get("wake_prefix", [])
         self.admins_id: list[str] = context.get_config().get("admins_id", [])
+        self._nomalize_whitelist()
+
+    def _nomalize_whitelist(self):
+        if not self.admins_id:
+            return
+        for admin_id in self.admins_id:
+            if admin_id not in self.whitelist:
+                self.whitelist.append(admin_id)
+        self.save_config()
