@@ -17,7 +17,7 @@ class CommandStep(BaseStep):
     async def handle(self, ctx: WakeContext) -> StepResult:
         # 白名单检查
         if self.in_whitelist(ctx):
-            return StepResult(wake=False, abort=True, msg="白名单会话，跳过指令屏蔽")
+            return StepResult()
 
         if self.cfg.block_builtin and ctx.cmd and ctx.cmd in self.cfg.builtin_cmds:
             return StepResult(wake=False, abort=True, msg=f"命令 '{ctx.cmd}' 已被禁用")

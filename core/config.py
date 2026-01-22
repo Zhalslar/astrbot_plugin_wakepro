@@ -151,9 +151,9 @@ class PluginConfig(ConfigNode):
         self.context = context
         self.wake_prefix: list[str] = self.context.get_config().get("wake_prefix", [])
         self.admins_id: list[str] = context.get_config().get("admins_id", [])
-        self._nomalize_whitelist()
+        self._normalize_whitelist()
 
-    def _nomalize_whitelist(self):
+    def _normalize_whitelist(self):
         if not self.admins_id:
             return
         for admin_id in self.admins_id:

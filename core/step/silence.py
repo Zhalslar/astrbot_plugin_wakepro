@@ -19,7 +19,7 @@ class SilenceStep(BaseStep):
 
         # 白名单检查
         if self.in_whitelist(ctx):
-            return StepResult(wake=False, abort=True, msg="白名单会话，跳过沉默检查")
+            return StepResult()
 
         # 闭嘴沉默
         if self.cfg.shutup < 1 and ctx.plain and ctx.group:

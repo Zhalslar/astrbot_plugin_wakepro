@@ -29,10 +29,10 @@ class WakeStep(BaseStep):
 
         # 跳过黑名单
         if self.in_blacklist(ctx):
-            return StepResult(abort=True, msg="黑名单会话，跳过智能唤醒")
+            return StepResult(msg="黑名单会话，跳过智能唤醒")
         # 跳过指令消息
         if ctx.cmd:
-            return StepResult(abort=True, msg="指令消息，跳过智能唤醒")
+            return StepResult(msg="指令消息，跳过智能唤醒")
 
         for seg in ctx.chain:
             # 艾特唤醒
