@@ -11,7 +11,6 @@ from astrbot.core.star.star_handler import star_handlers_registry
 
 from .core.config import PluginConfig
 from .core.model import (
-    GroupState,
     MemberState,
     StateManager,
     WakeContext,
@@ -22,7 +21,7 @@ from .core.pipeline import Pipeline
 class WakePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        self.cfg = PluginConfig(config, context=context)
+        self.cfg = PluginConfig(config, context)
         self.commands = self._get_all_commands()
         self.pipeline = Pipeline(self.cfg)
 
@@ -43,23 +42,35 @@ class WakePlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL, priority=99999)
     async def on_group_msg(self, event: AstrMessageEvent):
         """收到消息后"""
+        umo = event.unified_msg_origin
+        gid = event.get_group_id()
+        uid = event.get_sender_id()
+        bid = event.get_self_id()
+
+        if uid == bid:
+            return
+
+        if any(x in self.cfg.global_blacklist for x in (umo, uid, gid)):
+            event.stop_event()
+            return
+
         chain = event.get_messages()
         plains = [seg.text for seg in chain if isinstance(seg, Plain)]
         plain = " ".join(plains).strip()
         first_arg = event.message_str.split(" ", 1)[0]
         cmd = first_arg if first_arg in self.commands else None
-        gid = event.get_group_id()
-        uid = event.get_sender_id()
-        bid = event.get_self_id()
+
         group = StateManager.get_group(gid) if gid else None
         if group and uid not in group.members:
             group.members[uid] = MemberState(uid=uid)
+
         ctx = WakeContext(
             event=event,
             chain=chain,
             plain=plain,
             cmd=cmd,
             is_admin=event.is_admin(),
+            umo=umo,
             gid=gid,
             uid=uid,
             bid=bid,
@@ -75,11 +86,13 @@ class WakePlugin(Star):
         gid: str = event.get_group_id()
         uid: str = event.get_sender_id()
         result = event.get_result()
+
         if not gid or not uid or not result:
             return
-        g: GroupState = StateManager.get_group(gid)
-        g.bot_msgs.append(result.get_plain_text())
-        member = g.members.get(uid)
-        if not member:
-            return
-        member.last_reply = time.time()
+
+        group = StateManager.get_group(gid)
+        group.bot_msgs.append(result.get_plain_text())
+
+        member = group.members.get(uid)
+        if member:
+            member.last_reply = time.time()

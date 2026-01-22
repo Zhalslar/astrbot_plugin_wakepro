@@ -17,6 +17,10 @@ class SilenceStep(BaseStep):
         if not ctx.event.is_at_or_wake_command:
             return StepResult()
 
+        # 白名单检查
+        if self.in_whitelist(ctx):
+            return StepResult()
+
         # 闭嘴沉默
         if self.cfg.shutup < 1 and ctx.plain and ctx.group:
             th = sentiment.shut(ctx.plain)

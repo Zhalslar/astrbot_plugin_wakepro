@@ -1,93 +1,73 @@
 {
-    "pipeline": {
-        "description": "管道配置",
-        "type": "object",
-        "hint": "管道配置，用于配置组件的启停和运行顺序",
-        "items": {
-            "lock_order": {
-                "description": "锁定顺序",
-                "hint": "锁定后将按内置顺序执行：名单过滤 → 多级阻塞 → 指令屏蔽 → 智能唤醒 → 沉默检测",
-                "type": "bool",
-                "default": true
-            },
-            "steps": {
-                "description": "启用的步骤",
-                "hint": "勾选表示启用该步骤；未锁定顺序时，将按当前列表顺序执行",
-                "type": "list",
-                "options": [
-                    "gate(名单过滤)",
-                    "block(阻塞判断)",
-                    "cmd(指令屏蔽)",
-                    "wake(智能唤醒)",
-                    "silence(沉默检测)"
-                ],
-                "default": [
-                    "gate(名单过滤)",
-                    "block(阻塞判断)",
-                    "cmd(指令屏蔽)",
-                    "wake(智能唤醒)",
-                    "silence(沉默检测)"
-                ]
-            },
-            "admin_steps": {
-                "description": "对管理员无效的步骤",
-                "hint": "勾选后，该步骤对Bot管理员无效",
-                "type": "list",
-                "options": [
-                    "gate(名单检查)",
-                    "block(阻塞判断)",
-                    "cmd(指令屏蔽)",
-                    "wake(智能唤醒)",
-                    "silence(沉默检测)"
-                ],
-                "default": [
-                    "gate(名单检查)",
-                    "block(阻塞判断)",
-                    "cmd(指令屏蔽)"
-                ]
-            }
-        }
+    "global_blacklist": {
+        "description": "全局黑名单会话",
+        "hint": "全局黑名单会话将直接停止事件传播, 全局屏蔽",
+        "type": "list",
+        "default": []
     },
-    "gate": {
-        "description": "【名单过滤】",
-        "hint": "注意检查顺序：屏蔽自身 -> 屏蔽机器人 -> 用户白名单 -> 群聊白名单 -> 用户黑名单 -> 群聊黑名单",
+    "blacklist": {
+        "description": "黑名单会话",
+        "hint": "黑名单会话的消息将会跳过【智能唤醒】这一步, 支持直接填写会话ID、群聊ID、用户ID(如果冲突,请填写完整会话ID)",
+        "type": "list",
+        "default": []
+    },
+    "whitelist": {
+        "description": "白名单会话",
+        "hint": "白名单会话的消息将跳过这些步骤：【指令屏蔽】【阻塞判断】【沉默检测】。注意：本插件已自动将 Astrbot 设定的管理员加入此白名单。支持直接填写会话ID、群聊ID、用户ID(如果冲突,请填写完整会话ID)",
+        "type": "list",
+        "default": []
+    },
+    "command": {
+        "description": "【指令屏蔽】",
+        "hint": "注意：此步骤对白名单用户无效",
         "type": "object",
         "items": {
-            "block_self": {
-                "description": "屏蔽Bot自身的消息",
-                "hint": "当 消息发送者ID 等于 Bot自身ID 时，消息将被屏蔽。 注意可能导致无法接收好友申请、群邀请事件",
+            "builtin_cmds": {
+                "description": "内置指令",
+                "hint": "定义哪些指令属于内置指令",
+                "type": "list",
+                "default": [
+                    "llm",
+                    "t2i",
+                    "tts",
+                    "sid",
+                    "op",
+                    "wl",
+                    "dashboard_update",
+                    "alter_cmd",
+                    "provider",
+                    "model",
+                    "plugin",
+                    "plugin ls",
+                    "new",
+                    "switch",
+                    "rename",
+                    "del",
+                    "reset",
+                    "history",
+                    "persona",
+                    "tool ls",
+                    "key",
+                    "websearch"
+                ]
+            },
+            "block_builtin": {
+                "description": "禁止使用内置指令",
+                "hint": "开启后，内置指令将无法唤醒bot,",
                 "type": "bool",
                 "default": false
             },
-            "block_qqbot": {
-                "description": "屏蔽QQ机器人的消息",
-                "hint": "当 消息发送者ID 落在 QQ机器人ID范围 时，消息将被屏蔽。（仅QQ平台生效）",
+            "block_prefix_cmd": {
+                "description": "禁止使用前缀触发指令",
+                "hint": "开启后，即使用户使用前缀，也无法触发指令，但llm不受影响",
                 "type": "bool",
-                "default": true
+                "default": false
             },
-            "white_users": {
-                "description": "用户白名单",
-                "hint": "填写后仅白名单里的用户能唤醒bot，不填则不检查",
-                "type": "list",
-                "default": []
-            },
-            "white_groups": {
-                "description": "群聊白名单",
-                "hint": "填写后仅白名单里的群聊能唤醒bot，不填则不检查",
-                "type": "list",
-                "default": []
-            },
-            "black_users": {
-                "description": "用户黑名单",
-                "hint": "屏蔽黑名单里的用户，使其全局无法唤醒bot",
-                "type": "list",
-                "default": []
-            },
-            "black_groups": {
-                "description": "群聊黑名单",
-                "hint": "屏蔽黑名单中的群聊，该群消息无法唤醒bot",
-                "type": "list",
-                "default": []
+            "block_prefix_llm": {
+                "description": "禁止使用前缀唤醒LLM",
+                "hint": "开启后，即使用户使用前缀，也无法唤醒llm，但指令不受影响",
+                "type": "bool",
+                "default": false
             }
         }
     },
@@ -96,6 +76,29 @@
         "hint": "",
         "type": "object",
         "items": {
+            "wake_cd": {
+                "description": "唤醒冷却",
+                "hint": "bot回复的CD(冷却时间)，每个成员单独计CD，bot处于cd时不进行回复。 设为 0 表示关闭cd",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 10,
+                    "step": 0.1
+                },
+                "default": 0.5
+            },
+            "block_qqbot": {
+                "description": "屏蔽QQ机器人",
+                "hint": "当 消息发送者ID 落在 QQ机器人ID范围 时, 屏蔽该用户消息。(仅QQ平台生效)",
+                "type": "bool",
+                "default": true
+            },
+            "reread": {
+                "description": "屏蔽复读",
+                "hint": "屏蔽其他人对Bot消息的复读， 从而避免Bot被重复的话唤醒",
+                "type": "bool",
+                "default": true
+            },
             "keywords": {
                 "description": "屏蔽词",
                 "hint": "当用户输入的消息包含这些词时，bot将不会被唤醒",
@@ -376,83 +379,12 @@
                     "阴毛",
                     "淫"
                 ]
-            },
-            "reread": {
-                "description": "屏蔽复读",
-                "hint": "屏蔽其他人对Bot消息的复读， 从而避免Bot被重复的话唤醒",
-                "type": "bool",
-                "default": true
-            },
-            "wake_cd": {
-                "description": "唤醒CD(秒)",
-                "hint": "唤醒bot的CD(冷却时间)，每个成员单独计CD，bot处于唤醒CD时拒收该成员的一切消息。 设为 0 表示关闭CD",
-                "type": "float",
-                "slider": {
-                    "min": 0,
-                    "max": 10,
-                    "step": 0.1
-                },
-                "default": 0.5
-            }
-        }
-    },
-    "cmd": {
-        "description": "【指令屏蔽】",
-        "hint": "",
-        "type": "object",
-        "items": {
-            "builtin_cmds": {
-                "description": "内置指令",
-                "hint": "定义哪些指令属于内置指令",
-                "type": "list",
-                "default": [
-                    "llm",
-                    "t2i",
-                    "tts",
-                    "sid",
-                    "op",
-                    "wl",
-                    "dashboard_update",
-                    "alter_cmd",
-                    "provider",
-                    "model",
-                    "plugin",
-                    "plugin ls",
-                    "new",
-                    "switch",
-                    "rename",
-                    "del",
-                    "reset",
-                    "history",
-                    "persona",
-                    "tool ls",
-                    "key",
-                    "websearch"
-                ]
-            },
-            "block_builtin": {
-                "description": "禁止使用内置指令",
-                "hint": "开启后，内置指令将无法唤醒bot,",
-                "type": "bool",
-                "default": false
-            },
-            "block_prefix_cmd": {
-                "description": "禁止使用前缀触发指令",
-                "hint": "开启后，即使用户使用前缀，也无法触发指令，但llm不受影响",
-                "type": "bool",
-                "default": false
-            },
-            "block_prefix_llm": {
-                "description": "禁止使用前缀唤醒LLM",
-                "hint": "开启后，即使用户使用前缀，也无法唤醒llm，但指令不受影响",
-                "type": "bool",
-                "default": false
             }
         }
     },
     "wake": {
         "description": "【智能唤醒】",
-        "hint": "",
+        "hint": "注意: 此步骤仅对触发LLM的消息生效",
         "type": "object",
         "items": {
             "names": {
@@ -467,10 +399,10 @@
                 "type": "float",
                 "slider": {
                     "min": 0,
-                    "max": 10,
+                    "max": 20,
                     "step": 1
                 },
-                "default": 5.0
+                "default": 8.0
             },
             "similar": {
                 "description": "相关性唤醒阈值",
@@ -481,7 +413,7 @@
                     "max": 1,
                     "step": 0.01
                 },
-                "default": 0.8
+                "default": 0.49
             },
             "ask": {
                 "description": "答疑唤醒阈值",
@@ -540,7 +472,7 @@
     },
     "silence": {
         "description": "【沉默检测】",
-        "hint": "注意：只有在唤醒后才会进行沉默检查，触发沉默后, 沉默期间无法唤醒bot",
+        "hint": "注意：此步骤对白名单用户无效",
         "type": "object",
         "items": {
             "shutup": {

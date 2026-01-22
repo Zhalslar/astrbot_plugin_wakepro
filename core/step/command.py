@@ -11,10 +11,14 @@ class CommandStep(BaseStep):
 
     def __init__(self, config: PluginConfig):
         super().__init__(config)
-        self.cfg = config.cmd
+        self.cfg = config.command
         self.wake_prefix = config.wake_prefix
 
     async def handle(self, ctx: WakeContext) -> StepResult:
+        # 白名单检查
+        if self.in_whitelist(ctx):
+            return StepResult()
+
         if self.cfg.block_builtin and ctx.cmd and ctx.cmd in self.cfg.builtin_cmds:
             return StepResult(wake=False, abort=True, msg=f"命令 '{ctx.cmd}' 已被禁用")
 

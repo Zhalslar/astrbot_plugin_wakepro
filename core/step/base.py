@@ -14,7 +14,13 @@ class BaseStep(ABC):
     name: StepName
 
     def __init__(self, config: PluginConfig):
-        self.plugin_config = config
+        self.config = config
+
+    def in_blacklist(self, ctx: WakeContext) -> bool:
+        return any(x in self.config.blacklist for x in (ctx.umo, ctx.uid, ctx.gid))
+
+    def in_whitelist(self, ctx: WakeContext) -> bool:
+        return any(x in self.config.whitelist for x in (ctx.umo, ctx.uid, ctx.gid))
 
     @abstractmethod
     async def handle(self, ctx: WakeContext) -> StepResult:
