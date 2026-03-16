@@ -139,7 +139,7 @@ class SilenceConfig(ConfigNode):
 
 class DebounceConfig(ConfigNode):
     listen_seconds: float
-    max_merge_count: float
+    max_merge_count: int
     message_types: list[str]
 
 
