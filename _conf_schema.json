@@ -489,7 +489,7 @@
             "max_merge_count": {
                 "description": "最多合并消息数",
                 "hint": "同一轮防抖最多合并几条消息。设为 0 表示不限制；达到上限后，这一轮会立即发起请求，不再继续监听后续消息。",
-                "type": "float",
+                "type": "int",
                 "slider": {
                     "min": 0,
                     "max": 10,
