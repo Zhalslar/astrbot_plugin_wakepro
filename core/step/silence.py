@@ -1,4 +1,3 @@
-
 from ..config import PluginConfig
 from ..model import StepName, StepResult, WakeContext
 from ..sentiment import sentiment
@@ -31,7 +30,7 @@ class SilenceStep(BaseStep):
         # 辱骂沉默
         if self.cfg.insult < 1 and ctx.plain and ctx.member:
             th = sentiment.insult(ctx.plain)
-            if th >self.cfg.insult:
+            if th > self.cfg.insult:
                 seconds = th * self.cfg.multiple
                 ctx.member.silence_until = ctx.now + seconds
                 return StepResult(abort=True, msg=f"触发用户级闭嘴({seconds}秒)")
@@ -43,5 +42,3 @@ class SilenceStep(BaseStep):
                 ctx.member.silence_until = ctx.now + seconds
                 return StepResult(abort=True, msg=f"触发人机级闭嘴({seconds}秒)")
         return StepResult()
-
-

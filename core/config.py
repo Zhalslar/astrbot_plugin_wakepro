@@ -137,6 +137,12 @@ class SilenceConfig(ConfigNode):
     multiple: float
 
 
+class DebounceConfig(ConfigNode):
+    listen_seconds: float
+    max_merge_count: float
+    message_types: list[str]
+
+
 class PluginConfig(ConfigNode):
     global_blacklist: list[str]
     blacklist: list[str]
@@ -144,6 +150,7 @@ class PluginConfig(ConfigNode):
     command: CommandConfig
     block: BlockConfig
     wake: WakeConfig
+    debounce: DebounceConfig
     silence: SilenceConfig
 
     def __init__(self, config: AstrBotConfig, context: Context):

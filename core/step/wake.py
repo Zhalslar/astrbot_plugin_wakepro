@@ -21,6 +21,9 @@ class WakeStep(BaseStep):
         self.similarity = Similarity()
 
     async def handle(self, ctx: WakeContext) -> StepResult:
+        if ctx.debounce_follow_up:
+            return StepResult(msg="消息防抖窗口内，沿用已唤醒状态")
+
         # 前置条件：已沉默，禁止一切唤醒
         if ctx.group and ctx.group.shutup_until > ctx.now:
             return StepResult(wake=False, abort=True, msg="已沉默该群聊，禁止唤醒")

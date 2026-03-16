@@ -4,7 +4,14 @@ from astrbot.api import logger
 
 from .config import PluginConfig
 from .model import WakeContext
-from .step import BaseStep, BlockStep, CommandStep, SilenceStep, WakeStep
+from .step import (
+    BaseStep,
+    BlockStep,
+    CommandStep,
+    DebounceStep,
+    SilenceStep,
+    WakeStep,
+)
 
 
 class Pipeline:
@@ -17,6 +24,7 @@ class Pipeline:
     """
 
     STEP_REGISTRY: list[type[BaseStep]] = [
+        DebounceStep,
         BlockStep,
         WakeStep,
         CommandStep,
@@ -26,11 +34,14 @@ class Pipeline:
     def __init__(self, config: PluginConfig):
         self.plugin_config = config
         self._steps: list[BaseStep] = []
+        self._debounce_step: DebounceStep | None = None
         self._build_steps()
 
     def _build_steps(self) -> None:
         for cls in self.STEP_REGISTRY:
             step = cls(self.plugin_config)
+            if isinstance(step, DebounceStep):
+                self._debounce_step = step
             self._steps.append(step)
 
     # ==================== run =====================
@@ -44,6 +55,8 @@ class Pipeline:
                 if ctx.member:
                     ctx.member.last_wake = ctx.now
                 ctx.event.is_at_or_wake_command = True
+                if self._debounce_step:
+                    await self._debounce_step.activate_window(ctx)
             # 停止事件传播
             elif result.wake is False:
                 ctx.event.stop_event()

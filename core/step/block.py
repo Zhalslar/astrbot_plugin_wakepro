@@ -49,7 +49,8 @@ class BlockStep(BaseStep):
             return StepResult()
         # 唤醒CD阻塞
         if (
-            self.cfg.wake_cd > 0
+            not ctx.debounce_follow_up
+            and self.cfg.wake_cd > 0
             and ctx.member
             and ctx.now - ctx.member.last_wake < self.cfg.wake_cd
         ):
