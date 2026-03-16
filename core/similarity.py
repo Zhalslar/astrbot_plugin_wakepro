@@ -127,7 +127,7 @@ class Similarity:
     def _update_idf(self, group_id: str, tokens: set):
         data = self._GROUP_DATA[group_id]
         for t in tokens:
-            data["idf"][t] += 1 # type: ignore
+            data["idf"][t] += 1  # type: ignore
         data["total_docs"] += 1  # type: ignore
 
     def _tfidf_vector(self, group_id: str, tokens: list):

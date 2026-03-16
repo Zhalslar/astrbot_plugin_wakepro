@@ -1,4 +1,3 @@
-
 from astrbot.core.message.components import Plain
 
 from ..config import PluginConfig
@@ -15,6 +14,9 @@ class CommandStep(BaseStep):
         self.wake_prefix = config.wake_prefix
 
     async def handle(self, ctx: WakeContext) -> StepResult:
+        if ctx.debounce_follow_up:
+            return StepResult(msg="消息防抖窗口内，跳过指令判定")
+
         # 白名单检查
         if self.in_whitelist(ctx):
             return StepResult()
@@ -24,7 +26,6 @@ class CommandStep(BaseStep):
 
         seg = ctx.chain[0] if ctx.chain and isinstance(ctx.chain[0], Plain) else None
         if seg and any(seg.text.startswith(p) for p in self.wake_prefix):
-
             # 屏蔽前缀触发指令
             if ctx.cmd and self.cfg.block_prefix_cmd:
                 return StepResult(

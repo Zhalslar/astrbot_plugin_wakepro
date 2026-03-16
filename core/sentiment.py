@@ -8,6 +8,7 @@ import jieba
 # 扩充jieba词典, 后续补充
 jieba.add_word("傻逼")
 
+
 class Sentiment:
     """
     高精度语义检测器 - 优化版词表
@@ -304,6 +305,7 @@ class Sentiment:
         """
         words = cls._seg(text)
         return cls._calculate_confidence(words, cls.AI_WORDS)
+
 
 # 全局单例
 sentiment = Sentiment()

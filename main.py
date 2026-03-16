@@ -83,8 +83,14 @@ class WakePlugin(Star):
     @filter.on_decorating_result(priority=20)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """消息发送前"""
+        uid = event.get_sender_id()
+        if uid:
+            await StateManager.clear_pending_request(
+                StateManager.get_pending_key(event.unified_msg_origin, uid),
+                event=event,
+            )
+
         gid: str = event.get_group_id()
-        uid: str = event.get_sender_id()
         result = event.get_result()
 
         if not gid or not uid or not result:
