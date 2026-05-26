@@ -1,13 +1,16 @@
 # config.py
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, MutableMapping
+from pathlib import Path
 from types import MappingProxyType, UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from astrbot.api import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.context import Context
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 
 
 class ConfigNode:
@@ -153,12 +156,17 @@ class PluginConfig(ConfigNode):
     debounce: DebounceConfig
     silence: SilenceConfig
 
+    _plugin_name: str = "astrbot_plugin_wakepro"
+
     def __init__(self, config: AstrBotConfig, context: Context):
         super().__init__(config)
         self.context = context
         self.wake_prefix: list[str] = self.context.get_config().get("wake_prefix", [])
         self.admins_id: list[str] = context.get_config().get("admins_id", [])
+        self.plugin_dir = Path(get_astrbot_plugin_path()) / self._plugin_name
+        self.block_words_file = self.plugin_dir / "block_words.json"
         self._normalize_whitelist()
+        self._normalize_block_words()
 
     def _normalize_whitelist(self):
         if not self.admins_id:
@@ -167,3 +175,10 @@ class PluginConfig(ConfigNode):
             if admin_id not in self.whitelist:
                 self.whitelist.append(admin_id)
         self.save_config()
+
+    def _normalize_block_words(self):
+        if not self.block.keywords:
+            if self.block_words_file.exists():
+                with open(self.block_words_file, encoding="utf-8") as f:
+                    self.block.keywords = json.load(f)
+                self.save_config()

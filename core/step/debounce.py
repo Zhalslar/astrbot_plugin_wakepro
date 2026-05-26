@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from astrbot.core.message.components import At, BaseMessageComponent, Plain, Reply
+from pathlib import Path
+from urllib.parse import urlparse
+
+from astrbot.core.message.components import (
+    At,
+    BaseMessageComponent,
+    Image,
+    Plain,
+    Reply,
+)
 from astrbot.core.pipeline.process_stage import follow_up as process_follow_up
 
 from ..config import PluginConfig
@@ -31,6 +40,8 @@ class DebounceStep(BaseStep):
 
         if not pending:
             return StepResult()
+        if self._contains_gif(pending.chain) or self._contains_gif(ctx.chain):
+            return StepResult(msg="检测到 GIF，跳过消息合并")
 
         self._stop_previous_event(pending.event)
         ctx.debounce_follow_up = True
@@ -60,6 +71,8 @@ class DebounceStep(BaseStep):
 
     async def activate_window(self, ctx: WakeContext) -> None:
         if self.cfg.listen_seconds <= 0 or not ctx.uid:
+            return
+        if self._contains_gif(ctx.chain):
             return
         if not ctx.debounce_follow_up:
             message_type = self._detect_message_type(ctx)
@@ -131,3 +144,32 @@ class DebounceStep(BaseStep):
         ctx.event.message_obj.message = list(ctx.chain)
         ctx.event.message_obj.message_str = ctx.plain
         ctx.event.message_str = ctx.plain
+
+    @classmethod
+    def _contains_gif(cls, chain: list[BaseMessageComponent]) -> bool:
+        return any(cls._is_gif_image(seg) for seg in chain)
+
+    @classmethod
+    def _is_gif_image(cls, seg: BaseMessageComponent) -> bool:
+        if not isinstance(seg, Image):
+            return False
+        refs = (
+            getattr(seg, "path", None),
+            getattr(seg, "url", None),
+            getattr(seg, "file", None),
+        )
+        return any(cls._is_gif_ref(ref) for ref in refs)
+
+    @staticmethod
+    def _is_gif_ref(ref: str | None) -> bool:
+        if not ref:
+            return False
+
+        parsed_ref = ref
+        lowered = ref.lower()
+        if lowered.startswith(("http://", "https://")):
+            parsed_ref = urlparse(ref).path
+        elif lowered.startswith("file:///"):
+            parsed_ref = ref[8:]
+
+        return Path(parsed_ref).suffix.lower() == ".gif"
