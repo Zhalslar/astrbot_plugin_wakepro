@@ -1,7 +1,7 @@
 name: astrbot_plugin_wakepro
 display_name: 唤醒增强
-desc: AstrBot唤醒流水线：前置过滤 → 消息防抖 → 阻塞判断 → 智能唤醒 → 指令屏蔽 → 沉默检测
+desc: AstrBot唤醒流水线：阻塞判断 → 指令屏蔽 → 智能唤醒 → 消息防抖 → 沉默检测
 help: 略
-version: v2.2.1
+version: v2.2.2
 author: Zhalslar
 repo: https://github.com/Zhalslar/astrbot_plugin_wakepro

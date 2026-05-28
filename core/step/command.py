@@ -17,10 +17,6 @@ class CommandStep(BaseStep):
         if ctx.debounce_follow_up:
             return StepResult(msg="消息防抖窗口内，跳过指令判定")
 
-        # 白名单检查
-        if self.in_whitelist(ctx):
-            return StepResult()
-
         if self.cfg.block_builtin and ctx.cmd and ctx.cmd in self.cfg.builtin_cmds:
             return StepResult(wake=False, abort=True, msg=f"命令 '{ctx.cmd}' 已被禁用")
 
