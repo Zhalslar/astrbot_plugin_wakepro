@@ -215,6 +215,7 @@ class StepName(str, Enum):
     BLOCK = "block"
     COMMAND = "command"
     DEBOUNCE = "debounce"
+    MENTION = "mention"
     SILENCE = "silence"
     WAKE = "wake"
 

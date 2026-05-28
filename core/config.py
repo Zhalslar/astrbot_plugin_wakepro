@@ -153,8 +153,13 @@ class CommandConfig(ConfigNode):
     block_prefix_llm: bool
 
 
-class WakeConfig(ConfigNode):
+class MentionConfig(ConfigNode):
+    disable_reply_wake: bool
     names: list[str]
+    admin_names: list[str]
+
+
+class WakeConfig(ConfigNode):
     prolong: float
     similar: float
     ask: float
@@ -186,6 +191,7 @@ class PluginConfig(ConfigNode):
     pipeline: PipelineConfig
     command: CommandConfig
     block: BlockConfig
+    mention: MentionConfig
     wake: WakeConfig
     debounce: DebounceConfig
     silence: SilenceConfig
