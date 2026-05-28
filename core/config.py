@@ -104,6 +104,41 @@ class ConfigNode:
         self._data.save_config()
 
 
+class PipelineConfig(ConfigNode):
+    steps: list[str]
+    whitelist: list[str]
+    whitelist_steps: list[str]
+    blacklist: list[str]
+    blacklist_steps: list[str]
+
+    def __init__(self, data: MutableMapping[str, Any]):
+        super().__init__(data)
+        self._steps = self._parse_steps(self.steps)
+        self._whitelist_steps = self._parse_steps(self.whitelist_steps)
+        self._blacklist_steps = self._parse_steps(self.blacklist_steps)
+
+    @staticmethod
+    def _parse_steps(steps: list[str]) -> set[str]:
+        return {name.split("(", 1)[0].strip() for name in steps if name.strip()}
+
+    @staticmethod
+    def _contains_target(targets: list[str], *values: str) -> bool:
+        return any(value and value in targets for value in values)
+
+    def is_enabled_step(self, step_name: str) -> bool:
+        return step_name in self._steps
+
+    def in_whitelist(self, step_name: str, *values: str) -> bool:
+        return step_name in self._whitelist_steps and self._contains_target(
+            self.whitelist, *values
+        )
+
+    def in_blacklist(self, step_name: str, *values: str) -> bool:
+        return step_name in self._blacklist_steps and self._contains_target(
+            self.blacklist, *values
+        )
+
+
 class BlockConfig(ConfigNode):
     wake_cd: float
     block_qqbot: bool
@@ -148,8 +183,7 @@ class DebounceConfig(ConfigNode):
 
 class PluginConfig(ConfigNode):
     global_blacklist: list[str]
-    blacklist: list[str]
-    whitelist: list[str]
+    pipeline: PipelineConfig
     command: CommandConfig
     block: BlockConfig
     wake: WakeConfig
@@ -171,10 +205,13 @@ class PluginConfig(ConfigNode):
     def _normalize_whitelist(self):
         if not self.admins_id:
             return
+        changed = False
         for admin_id in self.admins_id:
-            if admin_id not in self.whitelist:
-                self.whitelist.append(admin_id)
-        self.save_config()
+            if admin_id not in self.pipeline.whitelist:
+                self.pipeline.whitelist.append(admin_id)
+                changed = True
+        if changed:
+            self.save_config()
 
     def _normalize_block_words(self):
         if not self.block.keywords:
