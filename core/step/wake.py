@@ -1,7 +1,5 @@
 import random
 
-from astrbot.core.message.components import At, Reply
-
 from ..config import PluginConfig
 from ..interest import Interest
 from ..model import StepName, StepResult, WakeContext
@@ -32,19 +30,6 @@ class WakeStep(BaseStep):
         # 跳过指令消息
         if ctx.cmd:
             return StepResult(msg="指令消息，跳过智能唤醒")
-
-        for seg in ctx.chain:
-            # 艾特唤醒
-            if isinstance(seg, At) and str(seg.qq) == ctx.bid:
-                return StepResult(wake=True, msg="艾特唤醒", prolong=True)
-            # 引用唤醒
-            if isinstance(seg, Reply) and str(seg.sender_id) == ctx.bid:
-                return StepResult(wake=True, msg="引用唤醒", prolong=True)
-        # 提及唤醒
-        if len(self.cfg.names) > 0 and ctx.plain:
-            for name in self.cfg.names:
-                if name in ctx.plain:
-                    return StepResult(wake=True, msg="提及唤醒", prolong=True)
         # 唤醒延长
         if (
             self.cfg.prolong > 0

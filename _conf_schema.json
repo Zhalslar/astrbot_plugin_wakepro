@@ -12,11 +12,12 @@
         "items": {
             "steps": {
                 "description": "启用的步骤",
-                "hint": "勾选表示启用该步骤，执行顺序已强制固定为：指令屏蔽 -> 阻塞判断 -> 智能唤醒 -> 消息防抖 -> 沉默检测",
+                "hint": "勾选表示启用该步骤，执行顺序已强制固定为：消息防抖 -> 阻塞判断 -> 提及唤醒 -> 智能唤醒 -> 指令屏蔽 -> 沉默检测",
                 "type": "list",
                 "options": [
                     "debounce(消息防抖)",
                     "block(阻塞判断)",
+                    "mention(提及唤醒)",
                     "wake(智能唤醒)",
                     "command(指令屏蔽)",
                     "silence(沉默检测)"
@@ -24,6 +25,7 @@
                 "default": [
                     "debounce(消息防抖)",
                     "block(阻塞判断)",
+                    "mention(提及唤醒)",
                     "wake(智能唤醒)",
                     "command(指令屏蔽)",
                     "silence(沉默检测)"
@@ -42,6 +44,7 @@
                 "options": [
                     "debounce(消息防抖)",
                     "block(阻塞判断)",
+                    "mention(提及唤醒)",
                     "wake(智能唤醒)",
                     "command(指令屏蔽)",
                     "silence(沉默检测)"
@@ -65,6 +68,7 @@
                 "options": [
                     "debounce(消息防抖)",
                     "block(阻塞判断)",
+                    "mention(提及唤醒)",
                     "wake(智能唤醒)",
                     "command(指令屏蔽)",
                     "silence(沉默检测)"
@@ -165,17 +169,39 @@
             }
         }
     },
+    "mention": {
+        "description": "【提及唤醒】",
+        "hint": "处理艾特、引用、通用唤醒词和专属唤醒词。专属唤醒词仅对 AstrBot 管理员生效",
+        "type": "object",
+        "items": {
+            "disable_reply_wake": {
+                "description": "禁用引用唤醒",
+                "hint": "开启后，引用 bot 消息不会触发唤醒",
+                "type": "bool",
+                "default": false
+            },
+            "names": {
+                "description": "通用唤醒词",
+                "hint": "当消息包含这些词时唤醒 bot，适用于所有用户",
+                "type": "list",
+                "default": []
+            },
+            "admin_names": {
+                "description": "专属唤醒词",
+                "hint": "当 AstrBot 管理员发送的消息包含这些词时唤醒 bot，非管理员无效",
+                "type": "list",
+                "default": [
+                    "宝贝",
+                    "宝宝"
+                ]
+            }
+        }
+    },
     "wake": {
         "description": "【智能唤醒】",
         "hint": "注意: 此步骤仅对触发LLM的消息生效",
         "type": "object",
         "items": {
-            "names": {
-                "description": "提及唤醒的昵称",
-                "hint": "提及到bot的昵称时,唤醒bot。不填时关闭提及检测",
-                "type": "list",
-                "default": []
-            },
             "prolong": {
                 "description": "唤醒延长（秒）",
                 "hint": "bot被唤醒后的多长时间内，持续保持唤醒状态(每个用户单独计时)。 设为 0 时关闭检测",
