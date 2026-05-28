@@ -5,79 +5,21 @@
         "type": "list",
         "default": []
     },
-    "pipeline": {
-        "description": "管道配置",
-        "hint": "配置固定顺序的步骤启用状态，以及白名单/黑名单在哪些步骤生效",
-        "type": "object",
-        "items": {
-            "steps": {
-                "description": "启用的步骤",
-                "hint": "勾选表示启用该步骤，执行顺序已强制固定为：指令屏蔽 -> 阻塞判断 -> 智能唤醒 -> 消息防抖 -> 沉默检测",
-                "type": "list",
-                "options": [
-                    "debounce(消息防抖)",
-                    "block(阻塞判断)",
-                    "wake(智能唤醒)",
-                    "command(指令屏蔽)",
-                    "silence(沉默检测)"
-                ],
-                "default": [
-                    "debounce(消息防抖)",
-                    "block(阻塞判断)",
-                    "wake(智能唤醒)",
-                    "command(指令屏蔽)",
-                    "silence(沉默检测)"
-                ]
-            },
-            "whitelist": {
-                "description": "白名单",
-                "hint": "支持直接填写会话ID、群聊ID、用户ID(如果冲突，请填写完整会话ID)。AstrBot 管理员会自动加入这里",
-                "type": "list",
-                "default": []
-            },
-            "whitelist_steps": {
-                "description": "白名单作用的步骤",
-                "hint": "命中白名单后，这些步骤会跳过处理",
-                "type": "list",
-                "options": [
-                    "debounce(消息防抖)",
-                    "block(阻塞判断)",
-                    "wake(智能唤醒)",
-                    "command(指令屏蔽)",
-                    "silence(沉默检测)"
-                ],
-                "default": [
-                    "block(阻塞判断)",
-                    "command(指令屏蔽)",
-                    "silence(沉默检测)"
-                ]
-            },
-            "blacklist": {
-                "description": "黑名单",
-                "hint": "支持直接填写会话ID、群聊ID、用户ID(如果冲突，请填写完整会话ID)",
-                "type": "list",
-                "default": []
-            },
-            "blacklist_steps": {
-                "description": "黑名单作用的步骤",
-                "hint": "命中黑名单后，这些步骤会跳过处理",
-                "type": "list",
-                "options": [
-                    "debounce(消息防抖)",
-                    "block(阻塞判断)",
-                    "wake(智能唤醒)",
-                    "command(指令屏蔽)",
-                    "silence(沉默检测)"
-                ],
-                "default": [
-                    "wake(智能唤醒)"
-                ]
-            }
-        }
+    "blacklist": {
+        "description": "黑名单会话",
+        "hint": "黑名单会话的消息将会跳过【智能唤醒】这一步, 支持直接填写会话ID、群聊ID、用户ID(如果冲突,请填写完整会话ID)",
+        "type": "list",
+        "default": []
+    },
+    "whitelist": {
+        "description": "白名单会话",
+        "hint": "白名单会话的消息将跳过这些步骤：【指令屏蔽】【阻塞判断】【沉默检测】。注意：本插件已自动将 Astrbot 设定的管理员加入此白名单。支持直接填写会话ID、群聊ID、用户ID(如果冲突,请填写完整会话ID)",
+        "type": "list",
+        "default": []
     },
     "command": {
         "description": "【指令屏蔽】",
-        "hint": "是否对白名单/黑名单生效由 pipeline 模块控制",
+        "hint": "注意：此步骤对白名单用户无效",
         "type": "object",
         "items": {
             "builtin_cmds": {
@@ -300,7 +242,7 @@
     },
     "silence": {
         "description": "【沉默检测】",
-        "hint": "是否对白名单/黑名单生效由 pipeline 模块控制",
+        "hint": "注意：此步骤对白名单用户无效",
         "type": "object",
         "items": {
             "shutup": {

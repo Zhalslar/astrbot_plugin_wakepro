@@ -44,6 +44,9 @@ class BlockStep(BaseStep):
         return False
 
     async def handle(self, ctx: WakeContext) -> StepResult:
+        # 白名单检查
+        if self.in_whitelist(ctx):
+            return StepResult()
         # 唤醒CD阻塞
         if (
             not ctx.debounce_follow_up
