@@ -48,6 +48,18 @@ class Pipeline:
 
     async def run(self, ctx: WakeContext):
         for step in self._steps:
+            if not self.plugin_config.pipeline.is_enabled_step(step.name):
+                continue
+            if self.plugin_config.pipeline.in_whitelist(
+                step.name, ctx.umo, ctx.uid, ctx.gid
+            ):
+                logger.debug(f"步骤 {step.name} 被白名单跳过")
+                continue
+            if self.plugin_config.pipeline.in_blacklist(
+                step.name, ctx.umo, ctx.uid, ctx.gid
+            ):
+                logger.debug(f"步骤 {step.name} 被黑名单跳过")
+                continue
             # 执行
             result = await step.handle(ctx)
             # 标记唤醒
