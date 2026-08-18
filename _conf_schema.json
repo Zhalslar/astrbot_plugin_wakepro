@@ -174,12 +174,6 @@
         "hint": "处理艾特、引用、通用唤醒词和专属唤醒词。专属唤醒词仅对 AstrBot 管理员生效",
         "type": "object",
         "items": {
-            "disable_reply_wake": {
-                "description": "禁用引用唤醒",
-                "hint": "开启后，引用 bot 消息不会触发唤醒",
-                "type": "bool",
-                "default": false
-            },
             "names": {
                 "description": "通用唤醒词",
                 "hint": "当消息包含这些词时唤醒 bot，适用于所有用户",
@@ -194,6 +188,24 @@
                     "宝贝",
                     "宝宝"
                 ]
+            },
+            "disable_reply_wake": {
+                "description": "禁用引用唤醒",
+                "hint": "开启后，引用 bot 消息不会触发唤醒",
+                "type": "bool",
+                "default": false
+            },
+            "disable_reply_other_wake": {
+                "description": "引用别人时不唤醒",
+                "hint": "当消息中引用了别人的消息,且没有引用、艾特或提及 bot， bot将不会被唤醒",
+                "type": "bool",
+                "default": true
+            },
+            "disable_at_other_wake": {
+                "description": "艾特别人时不唤醒",
+                "hint": "当消息中艾特了别人,且没有引用、艾特或提及 bot， bot将不会被唤醒",
+                "type": "bool",
+                "default": true
             }
         }
     },
