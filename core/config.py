@@ -154,9 +154,11 @@ class CommandConfig(ConfigNode):
 
 
 class MentionConfig(ConfigNode):
-    disable_reply_wake: bool
     names: list[str]
     admin_names: list[str]
+    disable_reply_wake: bool
+    disable_reply_other_wake: bool
+    disable_at_other_wake: bool
 
 
 class WakeConfig(ConfigNode):
